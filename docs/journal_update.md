@@ -43,7 +43,7 @@ Mengimplementasikan modul autentikasi terpadu (*Unified Account & RBAC*) menggun
 #### 🧠 Keputusan Arsitektur (Architectural Decisions)
 - **Unified Identifier Login**: Mendukung 1 endpoint login (`POST /api/v1/auth/login`) yang bisa menerima `email`, `username` (misal: `budi.santoso.42`), atau `nisn` tanpa pendaftaran mandiri (*pure admin invitation*).
 - **First-Time Forced Password Change**: Akun buatan Admin diberikan initial password dan flag `must_change_password = true`. Saat pertama login, user diwajibkan mengganti password baru via `POST /api/v1/auth/change-password`.
-- **JWT Claims & Role-Based Access Control (RBAC)**: Middleware `authenticate` memverifikasi Bearer token (401: `"Session expired or unauthenticated. Please log in again."`), sedangkan `authorizeRoles` membatasi akses role (403: `"You do not have permission to access this resource."`). Log detail teknikal tetap dicatat di server console.
+- **Validasi Terpusat dengan Zod**: Mengintegrasikan `validate(schema)` middleware menggunakan library Zod di layer route (`src/validations/*`), serta memvalidasi variabel lingkungan `process.env` menggunakan `z.object()` pada `src/config/env.config.js` untuk menjamin data masukan selalu bersih.
 - **Migrasi Schema SQL 0002**: Menambahkan kolom `must_change_password BOOLEAN NOT NULL DEFAULT TRUE` di tabel `users` database Neon PostgreSQL.
 
 #### 🛠️ Perubahan & Komponen Utama
@@ -55,8 +55,8 @@ Mengimplementasikan modul autentikasi terpadu (*Unified Account & RBAC*) menggun
 - `[NEW]` `src/services/auth.service.js` - Logika bisnis login, change password, refresh token, dan get me profile.
 - `[NEW]` `src/controllers/auth.controller.js` - Controller handler untuk HTTP API Auth.
 - `[NEW]` `src/middlewares/auth.middleware.js` - Middleware `authenticate` JWT dan `authorizeRoles` RBAC.
-- `[NEW]` `src/routes/auth.route.js` - Pemetaan endpoint `/api/v1/auth/*`.
-- `[NEW]` `scripts/seed_admin.js` - Script seeding akun Admin awal (`admin@eleva.sch.id` / `Admin123!`).
+- `[NEW]` `docs/technical/auth.md` - Dokumentasi teknikal modul Autentikasi (Spesifikasi API, Request/Response payload, Zod validation, HTTP status standards).
+- `[NEW]` `postman/eleva_auth_postman_collection.json` - Postman Collection v2.1.0 dengan otomatisasi *auto-save token variables* (`accessToken`, `refreshToken`).
 
 #### 🧪 Pengujian & Verifikasi
 - [x] Executed `0002_add_must_change_password.sql` pada Neon PostgreSQL database.

@@ -8,12 +8,6 @@ export class AuthService {
    * Login with Identifier (Email, Username, or NISN) + Password
    */
   static async login(identifier, password) {
-    if (!identifier || !password) {
-      const error = new Error('Identifier (email/username/nisn) and password are required');
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      throw error;
-    }
-
     const user = await UsersQuery.findByIdentifier(identifier);
 
     if (!user) {
@@ -63,12 +57,6 @@ export class AuthService {
    * Forced/Voluntary Password Change
    */
   static async changePassword(userId, oldPassword, newPassword) {
-    if (!newPassword || newPassword.length < 6) {
-      const error = new Error(ERROR_MESSAGES.PASSWORD_TOO_SHORT);
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      throw error;
-    }
-
     const user = await UsersQuery.findById(userId);
     if (!user) {
       const error = new Error(ERROR_MESSAGES.USER_NOT_FOUND);
@@ -97,12 +85,6 @@ export class AuthService {
    * Refresh Access Token using Refresh Token
    */
   static async refreshToken(refreshTokenStr) {
-    if (!refreshTokenStr) {
-      const error = new Error(ERROR_MESSAGES.REFRESH_TOKEN_REQUIRED);
-      error.statusCode = HTTP_STATUS.BAD_REQUEST;
-      throw error;
-    }
-
     try {
       const decoded = verifyRefreshToken(refreshTokenStr);
       const user = await UsersQuery.findById(decoded.sub);
