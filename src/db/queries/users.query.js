@@ -38,6 +38,14 @@ export class UsersQuery {
   }
 
   /**
+   * Find user by Google ID
+   */
+  static async findByGoogleId(googleId) {
+    const results = await db.select().from(users).where(eq(users.googleId, googleId)).limit(1);
+    return results[0] || null;
+  }
+
+  /**
    * Create a new user (Admin / Teacher / Student)
    */
   static async create(userData) {
@@ -69,7 +77,6 @@ export class UsersQuery {
       .update(users)
       .set({
         googleId,
-        mustChangePassword: false,
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
@@ -77,3 +84,4 @@ export class UsersQuery {
     return results[0];
   }
 }
+

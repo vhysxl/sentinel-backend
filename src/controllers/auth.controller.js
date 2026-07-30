@@ -38,6 +38,15 @@ export class AuthController {
   });
 
   /**
+   * POST /api/v1/auth/google
+   */
+  static googleLogin = asyncHandler(async (req, res) => {
+    const { idToken } = req.body;
+    const result = await AuthService.googleLogin(idToken);
+    return successResponse(res, 'Google authentication successful', result, HTTP_STATUS.OK);
+  });
+
+  /**
    * GET /api/v1/auth/me
    */
   static getMe = asyncHandler(async (req, res) => {
@@ -46,3 +55,4 @@ export class AuthController {
     return successResponse(res, 'Authenticated user profile retrieved', user, HTTP_STATUS.OK);
   });
 }
+

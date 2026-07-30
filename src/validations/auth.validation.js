@@ -29,3 +29,13 @@ export const refreshTokenSchema = z.object({
       .min(1, 'Refresh token cannot be empty'),
   }),
 });
+
+export const googleLoginSchema = z.object({
+  body: z.object({
+    idToken: z
+      .string({ required_error: 'Google ID token is required' })
+      .trim()
+      .min(1, 'Google ID token cannot be empty'),
+  }),
+});
+

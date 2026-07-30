@@ -21,6 +21,8 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+
+
 // Mount Application Routes
 app.use('/', routes);
 
