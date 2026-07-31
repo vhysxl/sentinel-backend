@@ -17,8 +17,14 @@ Eleva LMS menggunakan strategi **Unified Account & Pure Admin Invitation** denga
   - Akun buatan Admin diberi initial password dan status `must_change_password = true`.
   - Pada login pertama, API mengembalikan flag `mustChangePassword: true`.
   - Pengguna diwajibkan mengganti password baru via `POST /api/v1/auth/change-password` sebelum diperbolehkan mengakses fitur sekolah lainnya.
+- **Integrasi Google OAuth (SSO & Account Matching)**:
+  - Menggunakan Google Sign-In SDK (`google-auth-library`) untuk memverifikasi Google ID Token (`POST /api/v1/auth/google`).
+  - **Strict Pre-Created Account Matching**: Akun pengguna **wajib sudah terdaftar** di database `users` (dibuat oleh Admin / di-sync dari Dapodik). Jika email Google belum terdaftar di database, API menolak dengan HTTP `403 Forbidden` (`GOOGLE_ACCOUNT_NOT_REGISTERED`).
+  - **Auto-Linking Google ID**: Pada login Google pertama kali, `google_id` otomatis di-link ke baris pengguna yang cocok di database.
+  - Mempertahankan alur `mustChangePassword` pada login pertama agar pengguna menetapkan password pribadi lokal.
 
 ---
+
 
 ## 🗄️ Skema Tabel `users`
 
@@ -42,7 +48,7 @@ Eleva LMS menggunakan strategi **Unified Account & Pure Admin Invitation** denga
 ## 📡 Spesifikasi Endpoints API
 
 ### 1. Login (`POST /api/v1/auth/login`)
-Memverifikasi identitas pengguna dan mengembalikan Access Token & Refresh Token.
+Memverifikasi identitas pengguna (Email/Username/NISN + Password) dan mengembalikan Access Token & Refresh Token.
 
 - **Access**: Public
 - **Validation**: Zod `loginSchema` (`identifier` min 1, `password` min 1)
@@ -82,6 +88,54 @@ Memverifikasi identitas pengguna dan mengembalikan Access Token & Refresh Token.
   }
 }
 ```
+
+---
+
+### 2. Google OAuth Login (`POST /api/v1/auth/google`)
+Memverifikasi `idToken` dari Google Sign-In, mencocokkan `google_id` / `email` dengan akun pengguna yang telah didaftarkan Admin.
+
+- **Access**: Public
+- **Validation**: Zod `googleLoginSchema` (`idToken` min 1)
+
+#### Request Body
+```json
+{
+  "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6..."
+}
+```
+
+#### Successful Response (HTTP 200 OK)
+```json
+{
+  "success": true,
+  "message": "Google authentication successful",
+  "data": {
+    "user": {
+      "id": "6852d6e8-7daa-4804-9037-c499c105a123",
+      "role": "TEACHER",
+      "name": "Budi Guru",
+      "email": "budi@eleva.sch.id",
+      "googleId": "109876543210987654321",
+      "isActive": true,
+      "mustChangePassword": true
+    },
+    "mustChangePassword": true,
+    "tokens": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+  }
+}
+```
+
+#### Error Account Not Registered (HTTP 403 Forbidden)
+```json
+{
+  "success": false,
+  "message": "This Google account is not registered in Eleva LMS. Please contact school Administrator."
+}
+```
+
 
 ---
 

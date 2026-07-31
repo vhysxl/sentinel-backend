@@ -13,6 +13,8 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string({ required_error: 'JWT_REFRESH_SECRET is required' }).min(10),
   JWT_EXPIRES_IN: z.string().default('30m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
 });
 
 // Validate process.env against schema
@@ -35,6 +37,8 @@ export const config = Object.freeze({
   frontendUrl: env.FRONTEND_URL,
   isDevelopment: env.NODE_ENV === 'development',
   isProduction: env.NODE_ENV === 'production',
+  googleClientId: env.GOOGLE_CLIENT_ID,
+  googleClientSecret: env.GOOGLE_CLIENT_SECRET,
   jwt: Object.freeze({
     secret: env.JWT_SECRET,
     refreshSecret: env.JWT_REFRESH_SECRET,
@@ -42,3 +46,4 @@ export const config = Object.freeze({
     refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
   }),
 });
+

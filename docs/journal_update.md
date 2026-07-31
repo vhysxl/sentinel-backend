@@ -32,7 +32,34 @@ Singkatan penjelasan mengenai fitur yang dibangun atau masalah yang diselesaikan
 
 ## 📜 Log Perkembangan Proyek (Development Log)
 
+### 📅 2026-07-31 - Modul Google OAuth & Refactoring Keamanan Ganti Password
+
+**Aktor / Scope**: Authentication & Security (Tier 0 Foundation)  
+**Status**: `DONE`
+
+#### 🎯 Tujuan & Konteks
+Mengintegrasikan autentikasi Google OAuth (`POST /api/v1/auth/google`) menggunakan Google Sign-In SDK (`google-auth-library`), mendukung pencocokan otomatis `google_id` dan `email` untuk akun terdaftar (*Pure Admin Invitation*), mempertahankan alur wajib ganti password pada login pertama, serta memperbaiki penanganan error pada fitur ubah password.
+
+#### 🧠 Keputusan Arsitektur (Architectural Decisions)
+- **Centralized Account & Strict Pre-Created Matching**: Tidak mengizinkan registrasi mandiri akun Google baru. Hanya akun dengan email yang sudah didaftarkan Admin / di-sync dari Dapodik yang dapat mengakses sistem (HTTP 403 Forbidden untuk email asing).
+- **Auto-linking Google ID**: Jika email cocok pada login Google pertama, `google_id` otomatis di-link ke akun pengguna yang sudah ada di database `users`.
+- **First-Time Password Change Persistence**: Flag `must_change_password` tetap dipertahankan meski login via Google OAuth, memaksa pengguna membuat password lokal saat pertama kali masuk.
+- **Pure Backend API Architecture**: Seluruh aset frontend/dummy UI dibersihkan dari repositori backend agar tetap menjadi murni RESTful API service.
+
+#### 🛠️ Perubahan & Komponen Utama
+- `[MODIFY]` `.env` & `.env.example` - Menambahkan variabel `GOOGLE_CLIENT_ID` dan `GOOGLE_CLIENT_SECRET`.
+- `[MODIFY]` `src/config/env.config.js` - Memvalidasi variabel Google OAuth menggunakan Zod schema.
+- `[MODIFY]` `src/constants/error-messages.constant.js` - Penambahan pesan error terstandar untuk Google Auth dan password lama.
+- `[MODIFY]` `src/db/queries/users.query.js` - Menambahkan method `findByGoogleId` dan merapikan method `linkGoogleId`.
+- `[MODIFY]` `src/services/auth.service.js` - Penambahan method `googleLogin` dengan fallback clock skew dan perbaikan logika verifikasi `oldPassword`.
+- `[MODIFY]` `src/controllers/auth.controller.js` & `src/routes/auth.route.js` - Endpoint `POST /api/v1/auth/google`.
+- `[MODIFY]` `src/app.js` - Menghapus static file serving dan mengembalikan konfigurasi dasar Helmet.
+
+---
+
+
 ### 📅 2026-07-30 - Modul Autentikasi & Otorisasi (JWT + First-Time Password Change)
+
 
 **Aktor / Scope**: Authentication & Security (Tier 0 Foundation)  
 **Status**: `DONE`
