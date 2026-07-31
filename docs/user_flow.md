@@ -44,18 +44,25 @@ flowchart TD
 
 Satu akun guru dapat memiliki peran ganda: **Wali Kelas** dan/atau **Guru Mata Pelajaran**. UI menyesuaikan fitur berdasarkan peran yang ditugaskan.
 
-### Alur Registrasi Guru
+### Alur Autentikasi & Login Guru
 
 ```mermaid
 flowchart TD
-    T_INVITE([Guru Menerima Email Undangan]) --> T_REG_CHOICE{Metode Registrasi}
-    T_REG_CHOICE -- Email + Password --> T_REG_MANUAL[Registrasi Manual\nUsername / Email + Password]
-    T_REG_CHOICE -- Google OAuth --> T_REG_OAUTH[Login via Google OAuth]
-    T_REG_MANUAL --> T_DASHBOARD[Dashboard Guru]
-    T_REG_OAUTH --> T_DASHBOARD
+    T_START([Guru Memiliki Akun Terdaftar]) --> T_LOGIN_CHOICE{Metode Login}
+    T_LOGIN_CHOICE -- Email + Password --> T_LOGIN_MANUAL[POST /api/v1/auth/login\nEmail + Password]
+    T_LOGIN_CHOICE -- Google OAuth --> T_LOGIN_OAUTH[POST /api/v1/auth/google\nGoogle Sign-In SSO]
+    
+    T_LOGIN_MANUAL --> T_CHECK_PW{mustChangePassword == true?}
+    T_LOGIN_OAUTH --> T_CHECK_PW
+    
+    T_CHECK_PW -- Ya (Login Pertama) --> T_CHANGE_PW[Halaman Ubah Password\nPOST /api/v1/auth/change-password]
+    T_CHANGE_PW --> T_UPDATE_FLAG[mustChangePassword = false]
+    T_UPDATE_FLAG --> T_DASHBOARD[Dashboard Guru]
+    T_CHECK_PW -- Tidak --> T_DASHBOARD
 ```
 
 ### Alur Guru Mata Pelajaran
+
 
 ```mermaid
 flowchart TD
@@ -116,11 +123,18 @@ Siswa tidak melakukan registrasi mandiri. Semua akun dibuat oleh Admin.
 ```mermaid
 flowchart TD
     S_START([Siswa Mendapat Kredensial dari Admin]) --> S_LOGIN_CHOICE{Metode Login}
-    S_LOGIN_CHOICE -- NISN --> S_LOGIN_NISN[Login dengan NISN + Password]
-    S_LOGIN_CHOICE -- Username --> S_LOGIN_USER[Login dengan Username\ne.g. budi.santoso.42 + Password]
-    S_LOGIN_NISN --> S_DASHBOARD[Dashboard Siswa]
-    S_LOGIN_USER --> S_DASHBOARD
+    S_LOGIN_CHOICE -- NISN --> S_LOGIN_NISN[POST /api/v1/auth/login\nNISN + Password]
+    S_LOGIN_CHOICE -- Username --> S_LOGIN_USER[POST /api/v1/auth/login\nUsername + Password]
+    
+    S_LOGIN_NISN --> S_CHECK_PW{mustChangePassword == true?}
+    S_LOGIN_USER --> S_CHECK_PW
+    
+    S_CHECK_PW -- Ya (Login Pertama) --> S_CHANGE_PW[Halaman Ubah Password\nPOST /api/v1/auth/change-password]
+    S_CHANGE_PW --> S_UPDATE_FLAG[mustChangePassword = false]
+    S_UPDATE_FLAG --> S_DASHBOARD[Dashboard Siswa]
+    S_CHECK_PW -- Tidak --> S_DASHBOARD
 ```
+
 
 ### Alur Aktivitas Siswa
 
