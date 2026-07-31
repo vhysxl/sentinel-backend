@@ -109,7 +109,7 @@ flowchart TD
 
 ## 👨‍🎓 Siswa Flow
 
-Siswa tidak melakukan registrasi mandiri. Semua akun dibuat oleh Admin.
+Siswa tidak melakukan registrasi mandiri. Semua akun dibuat oleh Admin (Lihat rincian teknis di [auth-siswa.md](file:///e:/file%20rivan/Bootcamp/KADA-BATCH-4/Eleva-Capstone/eleva-backend/docs/technical/auth-siswa.md)).
 
 ### Alur Login Siswa
 

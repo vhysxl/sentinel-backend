@@ -64,3 +64,28 @@ Mengimplementasikan modul autentikasi terpadu (*Unified Account & RBAC*) menggun
 
 #### ⏭️ Langkah Selanjutnya (Next Steps)
 - Modul Manajemen Sekolah & Peran Guru (Tier 1: Grade Levels, Classes, Subjects, Teacher Assignments).
+
+---
+
+### 📅 2026-07-31 - Modul Spesifikasi & Dokumentasi Auth Siswa
+
+**Aktor / Scope**: Student Authentication & Authorization (`STUDENT` Role)  
+**Status**: `DONE`
+
+#### 🎯 Tujuan & Konteks
+Membuat spesifikasi dan dokumentasi teknis mendalam untuk modul **Auth Siswa** dengan opsi login NISN dan System-Generated Username (`budi.santoso.42`) serta menetapkan ketergantungan fitur (Prasyarat: Akun di-generate oleh Admin, Fitur Dependen: Login Siswa, Pengerjaan Kuis, Lihat Nilai).
+
+#### 🧠 Keputusan Arsitektur (Architectural Decisions)
+- **Fleksibilitas Login Identifier Siswa**: Siswa dapat login via 1 endpoint terpadu `POST /api/v1/auth/login` menggunakan NISN (contoh: `0012345678`) atau Username buatan sistem (contoh: `budi.santoso.42`).
+- **Otorisasi Fitur Dependen (RBAC)**: Kuis (`POST /api/v1/quizzes/:id/submissions`) dan Nilai (`GET /api/v1/reports/my-grades`) memvalidasi JWT token `accessToken` dengan perizinan `authorizeRoles('STUDENT')`.
+- **Pure Admin Generation**: Tidak ada *self-registration* siswa untuk mencegah manipulasi data siswa K-12.
+
+#### 🛠️ Perubahan & Komponen Utama
+- `[NEW]` `docs/technical/auth-siswa.md` - Spesifikasi teknikal terperinci untuk Auth Siswa (Prasyarat, Dependent Features, Endpoints, Sequence Diagram, & RBAC).
+- `[MODIFY]` `docs/deps_tree.md` - Pembaruan entri Auth Siswa di Tier 0 untuk menjelaskan pilihan login & fitur yang bergantung padanya.
+- `[MODIFY]` `docs/user_flow.md` - Penambahan referensi dokumentasi Auth Siswa pada alur aktivitas siswa.
+- `[MODIFY]` `docs/journal_update.md` - Penambahan catatan jurnal perkembangan proyek.
+
+#### ⏭️ Langkah Selanjutnya (Next Steps)
+- Modul Manajemen Sekolah & Peran Guru (Tier 1: Grade Levels, Classes, Subjects, Teacher Assignments).
+

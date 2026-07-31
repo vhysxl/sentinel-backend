@@ -101,7 +101,7 @@ Layer ini tidak memiliki dependensi lain dan harus dibangun paling awal.
 | **Auth Admin** | Tidak Ada | Manajemen Sekolah, Whitelist Guru, Job Trigger AI |
 | **Whitelist Invite Guru** | Auth Admin | Registrasi/Auth Guru |
 | **Auth Guru** | Whitelist Email | Penugasan Peran, Manajemen Kuis, Presensi |
-| **Auth Siswa** | Di-generate Admin | Login Siswa, Pengerjaan Kuis, Lihat Nilai |
+| **Auth Siswa** | Akun di-generate Admin (NISN, Username system-generated `budi.santoso.42`, Password) | Login Siswa (NISN/Username), Pengerjaan Kuis, Lihat Nilai |
 
 ---
 
