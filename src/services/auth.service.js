@@ -14,11 +14,21 @@ export class AuthService {
   /**
    * Login with Identifier (Email, Username, or NISN) + Password
    */
-  static async login(identifier, password) {
+  static async login(identifier, password, role) {
     const user = await UsersQuery.findByIdentifier(identifier);
+    console.log('[DEBUG Auth] Login attempt:', { identifier, role, userRole: user?.role });
 
     if (!user) {
+      console.log('[DEBUG Auth] User not found for identifier:', identifier);
       const error = new Error(ERROR_MESSAGES.INVALID_CREDENTIALS);
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      throw error;
+    }
+
+    // Optional role check if role is explicitly provided in request
+    if (role && user.role.toUpperCase() !== role.toUpperCase()) {
+      console.log('[DEBUG Auth] Role mismatch. Expected:', role, 'Got:', user.role);
+      const error = new Error('You are not authorized to login from this portal.');
       error.statusCode = HTTP_STATUS.UNAUTHORIZED;
       throw error;
     }
@@ -63,7 +73,7 @@ export class AuthService {
   /**
    * Google OAuth Login / Authentication
    */
-  static async googleLogin(idToken) {
+  static async googleLogin(idToken, role) {
     let payload;
     try {
       const ticket = await googleClient.verifyIdToken({
@@ -95,7 +105,6 @@ export class AuthService {
 
     const { sub: googleId, email } = payload;
 
-
     // 1. Search by Google ID first
     let user = await UsersQuery.findByGoogleId(googleId);
 
@@ -111,6 +120,16 @@ export class AuthService {
     if (!user) {
       const error = new Error(ERROR_MESSAGES.GOOGLE_ACCOUNT_NOT_REGISTERED);
       error.statusCode = HTTP_STATUS.FORBIDDEN;
+      throw error;
+    }
+
+    console.log('[DEBUG Auth] Google login attempt:', { email, role, userRole: user?.role });
+
+    // Optional role check if role is explicitly provided
+    if (role && user.role.toUpperCase() !== role.toUpperCase()) {
+      console.log('[DEBUG Auth] Google login role mismatch. Expected:', role, 'Got:', user.role);
+      const error = new Error('You are not authorized to login from this portal.');
+      error.statusCode = HTTP_STATUS.UNAUTHORIZED;
       throw error;
     }
 

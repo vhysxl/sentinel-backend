@@ -8,8 +8,8 @@ export class AuthController {
    * POST /api/v1/auth/login
    */
   static login = asyncHandler(async (req, res) => {
-    const { identifier, password } = req.body;
-    const result = await AuthService.login(identifier, password);
+    const { identifier, password, role } = req.body;
+    const result = await AuthService.login(identifier, password, role);
     return successResponse(res, 'Login successful', result, HTTP_STATUS.OK);
   });
 
@@ -41,8 +41,8 @@ export class AuthController {
    * POST /api/v1/auth/google
    */
   static googleLogin = asyncHandler(async (req, res) => {
-    const { idToken } = req.body;
-    const result = await AuthService.googleLogin(idToken);
+    const { idToken, role } = req.body;
+    const result = await AuthService.googleLogin(idToken, role);
     return successResponse(res, 'Google authentication successful', result, HTTP_STATUS.OK);
   });
 
