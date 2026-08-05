@@ -1,14 +1,16 @@
 import { Router } from 'express';
-import { getVendors, createVendor, getVendorById, updateVendor } from '../controllers/vendor.controller.js';
+import { VendorController } from '../controllers/vendor.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
+import { validate } from '../middlewares/validate.middleware.js';
+import { createVendorSchema, vendorIdSchema, updateVendorSchema } from '../validations/index.js';
 
 const router = Router();
 
 router.use(authenticate);
 
-router.post('/', createVendor);
-router.get('/', getVendors);
-router.get('/:id', getVendorById);
-router.put('/:id', updateVendor);
+router.post('/', validate(createVendorSchema), VendorController.create);
+router.get('/', VendorController.list);
+router.get('/:id', validate(vendorIdSchema), VendorController.getById);
+router.put('/:id', validate(updateVendorSchema), VendorController.update);
 
 export default router;
