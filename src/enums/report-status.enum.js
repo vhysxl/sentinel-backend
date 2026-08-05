@@ -1,5 +1,0 @@
-export const REPORT_STATUS = Object.freeze({
-  DRAFT: 'DRAFT',
-  UNDER_REVIEW: 'UNDER_REVIEW',
-  PUBLISHED: 'PUBLISHED',
-});

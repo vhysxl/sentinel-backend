@@ -1,7 +1,7 @@
 {
-  "name": "eleva-backend",
+  "name": "sentinel-backend",
   "version": "1.0.0",
-  "description": "AI-Powered Learning Management System (LMS) for K-12 Schools - Backend API",
+  "description": "Sentinel Backend API",
   "type": "module",
   "main": "src/server.js",
   "scripts": {

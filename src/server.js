@@ -1,12 +1,14 @@
 import app from './app.js';
-import { config } from './config/env.config.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
-const server = app.listen(config.port, () => {
-  console.log(`🚀 Eleva LMS Backend running on http://localhost:${config.port} [${config.nodeEnv}]`);
-  console.log(`🏥 Health Check available at http://localhost:${config.port}/health`);
+const port = process.env.PORT || 3000;
+
+const server = app.listen(port, () => {
+  console.log(`🚀 Sentinel Backend running on http://localhost:${port}`);
+  console.log(`🏥 Health Check available at http://localhost:${port}/health`);
 });
 
-// Graceful Shutdown Handling
 const gracefulShutdown = (signal) => {
   console.log(`\n⚠️ Received ${signal}. Shutting down gracefully...`);
   server.close(() => {
