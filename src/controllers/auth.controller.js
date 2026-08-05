@@ -1,113 +1,44 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { db } from '../db/client.js';
-import { users } from '../db/schema/users.js';
-import { config } from '../config/env.config.js';
-import { eq } from 'drizzle-orm';
-import { z } from 'zod';
+import { AuthService } from '../services/auth.service.js';
+import { successResponse } from '../utils/api-response.util.js';
+import { asyncHandler } from '../utils/async-handler.util.js';
 
-const loginSchema = z.object({
-  identifier: z.string().min(1, 'Identifier is required'),
-  password: z.string().min(1, 'Password is required')
-});
+export class AuthController {
+  static login = asyncHandler(async (req, res) => {
+    const { email, password } = req.body;
+    const result = await AuthService.login(email, password);
+    return successResponse(res, 'Login successful', result);
+  });
 
-export const login = async (req, res) => {
-  try {
-    const parseResult = loginSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid input data',
-        errors: parseResult.error.errors
-      });
-    }
+  static googleLogin = asyncHandler(async (req, res) => {
+    const result = await AuthService.googleLogin(req.body.idToken);
 
-    const { identifier, password } = parseResult.data;
+    // Tells the UI to show the one-time notice explaining that the temporary
+    // password no longer works.
+    const message = result.tempPasswordCleared
+      ? 'Signed in with Google. Your temporary password is no longer valid.'
+      : 'Login successful';
 
-    // Find user by username using the identifier
-    const [user] = await db.select().from(users).where(eq(users.username, identifier)).limit(1);
+    return successResponse(res, message, result);
+  });
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
+  static refresh = asyncHandler(async (req, res) => {
+    const result = await AuthService.refresh(req.body.refreshToken);
+    return successResponse(res, 'Access token refreshed', result);
+  });
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+  static getMe = asyncHandler(async (req, res) => {
+    const user = await AuthService.getMe(req.user.sub);
+    return successResponse(res, 'User retrieved successfully', { user });
+  });
 
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
+  static changePassword = asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const user = await AuthService.changePassword(req.user.sub, currentPassword, newPassword);
+    return successResponse(res, 'Password updated successfully', { user });
+  });
 
-    // Generate JWT
-    const token = jwt.sign(
-      { 
-        id: user.id, 
-        username: user.username,
-        role: user.role,
-        fullname: user.fullname,
-        department: user.department
-      },
-      config.jwt.secret,
-      { expiresIn: config.jwt.expiresIn }
-    );
-
-    // Don't send password back
-    const { password: _, ...userWithoutPassword } = user;
-
-    res.status(200).json({
-      success: true,
-      message: 'Login successful',
-      data: {
-        user: userWithoutPassword,
-        mustChangePassword: false,
-        tokens: {
-          accessToken: token,
-          refreshToken: token // fallback for now
-        }
-      }
-    });
-
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-};
-
-export const getMe = async (req, res) => {
-  try {
-    const { eq } = await import('drizzle-orm');
-    const [user] = await db.select().from(users).where(eq(users.id, req.user.id)).limit(1);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    const { password: _, ...userWithoutPassword } = user;
-
-    res.status(200).json({
-      success: true,
-      message: 'User retrieved successfully',
-      data: {
-        user: userWithoutPassword
-      }
-    });
-  } catch (error) {
-    console.error('getMe error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-};
+  static setPassword = asyncHandler(async (req, res) => {
+    const user = await AuthService.setPassword(req.user.sub, req.body.newPassword);
+    return successResponse(res, 'Password set successfully', { user });
+  });
+}

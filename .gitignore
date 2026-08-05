@@ -21,6 +21,3 @@ npm-debug.log*
 dist/
 coverage/
 skill.zip
-
-# scripts
-scripts/

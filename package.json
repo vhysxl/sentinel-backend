@@ -6,11 +6,16 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "node scripts/seed-admin.js"
   },
   "keywords": [
-    "eleva",
-    "lms",
+    "sentinel",
+    "finance",
+    "audit",
     "express",
     "drizzle",
     "zod",

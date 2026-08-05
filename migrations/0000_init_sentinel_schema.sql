@@ -1,12 +1,17 @@
 CREATE TABLE "users" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"username" varchar(50) NOT NULL,
-	"fullname" varchar(100),
-	"password" varchar(255) NOT NULL,
-	"role" varchar(20) NOT NULL,
-	"department" varchar(50) NOT NULL,
-	"created_at" timestamp DEFAULT now(),
-	CONSTRAINT "users_username_unique" UNIQUE("username")
+	"email" varchar(255) NOT NULL,
+	"fullname" varchar(100) NOT NULL,
+	"password_hash" varchar(255),
+	"google_sub" varchar(255),
+	"is_admin" boolean DEFAULT false NOT NULL,
+	"must_change_password" boolean DEFAULT false NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"last_login_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
+	CONSTRAINT "users_email_unique" UNIQUE("email"),
+	CONSTRAINT "users_google_sub_unique" UNIQUE("google_sub")
 );
 --> statement-breakpoint
 CREATE TABLE "vendors" (

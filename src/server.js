@@ -1,18 +1,17 @@
 import app from './app.js';
-import dotenv from 'dotenv';
-dotenv.config();
+import { config } from './config/env.config.js';
+import { pool } from './db/client.js';
 
-const port = process.env.PORT || 3000;
-
-const server = app.listen(port, () => {
-  console.log(`🚀 Sentinel Backend running on http://localhost:${port}`);
-  console.log(`🏥 Health Check available at http://localhost:${port}/health`);
+const server = app.listen(config.port, () => {
+  console.log(`🚀 Sentinel Backend running on http://localhost:${config.port}`);
+  console.log(`🏥 Health Check available at http://localhost:${config.port}/health`);
 });
 
 const gracefulShutdown = (signal) => {
   console.log(`\n⚠️ Received ${signal}. Shutting down gracefully...`);
-  server.close(() => {
-    console.log('✅ HTTP server closed. Process exiting.');
+  server.close(async () => {
+    await pool.end();
+    console.log('✅ HTTP server and database pool closed. Process exiting.');
     process.exit(0);
   });
 };
