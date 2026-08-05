@@ -3,6 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import authRoutes from './routes/auth.route.js';
 import userRoutes from './routes/user.route.js';
+import transactionRoutes from './routes/transaction.routes.js';
+import vendorRoutes from './routes/vendor.route.js';
 import { notFoundHandler, errorHandler } from './middlewares/error.middleware.js';
 import { config } from './config/env.config.js';
 
@@ -20,6 +22,8 @@ app.get('/health', (req, res) => {
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/transactions', transactionRoutes);
+app.use('/api/v1/vendors', vendorRoutes);
 
 // Must stay last: anything unmatched, or thrown above, lands here.
 app.use(notFoundHandler);

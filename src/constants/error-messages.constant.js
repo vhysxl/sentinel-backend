@@ -33,5 +33,12 @@ export const ERROR_MESSAGES = Object.freeze({
   // Users
   USER_NOT_FOUND: 'User not found',
   EMAIL_ALREADY_EXISTS: 'An account with this email already exists',
-  CANNOT_DEACTIVATE_SELF: 'You cannot deactivate your own account'
+  CANNOT_DEACTIVATE_SELF: 'You cannot deactivate your own account',
+
+  // Vendors
+  VENDOR_NOT_FOUND: 'Vendor not found',
+
+  // Transactions
+  TRANSACTION_NOT_FOUND: 'Transaction not found',
+  VENDOR_REQUIRED_FOR_CATEGORY: 'Vendor is required for this category'
 });
