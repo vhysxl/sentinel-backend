@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b7f3c1a2-9d4e-4f18-8c62-1a5e7d3b9f04",
     "name": "Sentinel API",
-    "description": "Sentinel Backend — Express + Drizzle.\n\nGrows one folder per module. Sprint 1 ships `Auth` and `Users`; `Vendors` and `Transactions` land next, and the Sprint 2 AI service (`/analyze`, `/chat`) lives in a separate repo and collection.\n\n## Setup\n1. Import `sentinel_local.postman_environment.json` and select it.\n2. Seed a Finance Lead: `npm run db:seed -- lead@company.com \"Nama\"`.\n3. Put that email and password into the `seedEmail` / `seedPassword` variables.\n4. Run **Auth → Login (password)**. It captures `accessToken` and `refreshToken` automatically — every other request reuses them, so no copy-pasting.\n\n## Order that works end to end\nLogin → Users: Create member (captures `memberId` + `tempPassword`) → Users: List → Users: Deactivate member.\n\n`Guards` holds the negative cases. They are meant to fail with a specific status, and their tests assert exactly that — a green run there means the API is refusing what it should.",
+    "description": "Sentinel Backend — Express + Drizzle.\n\nGrows one folder per module: `Auth`, `Users`, `Vendors`, `Transactions`. The Sprint 2 AI service (`/analyze`, `/chat`) lives in a separate repo and collection.\n\n## Setup\n1. Import `sentinel_local.postman_environment.json` and select it.\n2. Seed a Finance Lead: `npm run db:seed -- lead@company.com \"Nama\"`.\n3. Put that email and password into the `seedEmail` / `seedPassword` variables.\n4. Run **Auth → Login (password)**. It captures `accessToken` and `refreshToken` automatically — every other request reuses them, so no copy-pasting.\n\n## Order that works end to end\nLogin → Users: Create member (captures `memberId` + `tempPassword`) → Users: List → Users: Deactivate member.\n\nSeparately: Login → Vendors: Create Vendor (captures `vendorId`) → Transactions: Create Transaction (B2B Sales) (spends `vendorId`, captures `transactionId`) → Transactions: List / Get / Update.\n\n`Guards` holds the negative cases. They are meant to fail with a specific status, and their tests assert exactly that — a green run there means the API is refusing what it should.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -635,64 +635,31 @@
       ]
     },
     {
-      "name": "Transactions",
-      "description": "CRUD for transactions (Create, Read, Update). No Delete endpoint is implemented.",
+      "name": "Vendors",
+      "description": "Companies on the other side of a transaction — a supplier being paid, or (for `B2B Sales`) the buyer. No Delete endpoint: a vendor is retired by setting `status: \"inactive\"`, same pattern as Users.",
       "item": [
         {
-          "name": "List Transactions",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/transactions",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ]
+          "name": "Create Vendor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('defaults status to active', () => {",
+                  "  pm.expect(body.data.vendor.status).to.eql('active');",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('vendorId', body.data.vendor.id);"
+                ]
+              }
             }
-          }
-        },
-        {
-          "name": "List Categories",
+          ],
           "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/transactions/categories",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions",
-                "categories"
-              ]
-            },
-            "description": "Returns standard business categories. Pass `?type=income` or `?type=expense` to filter."
-          }
-        },
-        {
-          "name": "Get Transaction by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/transactions/1",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions",
-                "1"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Update Transaction",
-          "request": {
-            "method": "PUT",
+            "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
@@ -701,106 +668,8 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"amount\": 2000.00,\n  \"description\": \"Updated description\"\n}"
+              "raw": "{\n  \"vendor_name\": \"PT Sejahtera Bersama\",\n  \"bank_account\": \"BCA 12345678\"\n}"
             },
-            "url": {
-              "raw": "{{baseUrl}}/transactions/1",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions",
-                "1"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Create Transaction (B2B Sales)",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 5000000.00,\n  \"type\": \"income\",\n  \"category\": \"B2B Sales\",\n  \"description\": \"Penjualan B2B ke vendor 1\",\n  \"vendor_id\": 1,\n  \"input_by_user_id\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Create Transaction (Retail Sales - No Vendor)",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transaction_date\": \"2024-03-06T10:00:00Z\",\n  \"amount\": 150000.00,\n  \"type\": \"income\",\n  \"category\": \"Sales\",\n  \"description\": \"Penjualan ritel tunai\",\n  \"input_by_user_id\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Create Transaction (Payroll - No Vendor)",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transaction_date\": \"2024-03-25T10:00:00Z\",\n  \"amount\": 8000000.00,\n  \"type\": \"expense\",\n  \"category\": \"Payroll & Benefits\",\n  \"description\": \"Pembayaran gaji bulan Maret\",\n  \"input_by_user_id\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Vendors",
-      "description": "Endpoints to manage vendors.",
-      "item": [
-        {
-          "name": "List Vendors",
-          "request": {
-            "method": "GET",
-            "header": [],
             "url": {
               "raw": "{{baseUrl}}/vendors",
               "host": [
@@ -809,23 +678,29 @@
               "path": [
                 "vendors"
               ]
-            }
+            },
+            "description": "`status` defaults to `active` when omitted. Captures `vendorId`, spent by Transactions → Create Transaction (B2B Sales)."
           }
         },
         {
-          "name": "Create Vendor",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"vendor_name\": \"PT Sejahtera Bersama\",\n  \"bank_account\": \"BCA 12345678\",\n  \"status\": \"active\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
+          "name": "List Vendors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array', () => {",
+                  "  pm.expect(pm.response.json().data.vendors).to.be.an('array');",
+                  "});"
+                ]
               }
-            },
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/vendors",
               "host": [
@@ -839,29 +714,120 @@
         },
         {
           "name": "Get Vendor by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('id matches the requested vendor', () => {",
+                  "  pm.expect(pm.response.json().data.vendor.id).to.eql(Number(pm.collectionVariables.get('vendorId')));",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/vendors/1",
+              "raw": "{{baseUrl}}/vendors/{{vendorId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "vendors",
-                "1"
+                "{{vendorId}}"
               ]
             }
           }
         },
         {
           "name": "Update Vendor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('name is updated', () => {",
+                  "  pm.expect(body.data.vendor.vendor_name).to.eql('PT Sejahtera Terus');",
+                  "});",
+                  "pm.test('status is updated', () => {",
+                  "  pm.expect(body.data.vendor.status).to.eql('inactive');",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PUT",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"vendor_name\": \"PT Sejahtera Terus\",\n  \"status\": \"inactive\"\n}",
+              "raw": "{\n  \"vendor_name\": \"PT Sejahtera Terus\",\n  \"status\": \"inactive\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendors/{{vendorId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vendors",
+                "{{vendorId}}"
+              ]
+            },
+            "description": "Partial update — only sent fields change. Setting `status: \"inactive\"` is how a vendor is retired; there is no delete endpoint."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "description": "Create, Read, Update for transactions — no Delete, financial records aren't destroyed. Run the Create requests before Get/Update; they capture `transactionId`. `Create Transaction (B2B Sales)` spends `vendorId`, so run Vendors → Create Vendor first.",
+      "item": [
+        {
+          "name": "Create Transaction (B2B Sales)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('recorded under the logged-in user, not a client-supplied id', () => {",
+                  "  pm.expect(body.data.transaction.input_by_user_id).to.eql(Number(pm.collectionVariables.get('currentUserId')));",
+                  "});",
+                  "pm.test('vendor is attached', () => {",
+                  "  pm.expect(body.data.transaction.vendor_id).to.eql(Number(pm.collectionVariables.get('vendorId')));",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('transactionId', body.data.transaction.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 5000000.00,\n  \"type\": \"income\",\n  \"category\": \"B2B Sales\",\n  \"description\": \"Penjualan B2B ke vendor\",\n  \"vendor_id\": {{vendorId}}\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -869,15 +835,261 @@
               }
             },
             "url": {
-              "raw": "{{baseUrl}}/vendors/1",
+              "raw": "{{baseUrl}}/transactions",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "vendors",
-                "1"
+                "transactions"
+              ]
+            },
+            "description": "`B2B Sales` names a specific buying company, so `vendor_id` is required — reuses the vendor created in Vendors → Create Vendor.\n\n`input_by_user_id` is never read from the body; it is always the authenticated caller. Captures `transactionId`."
+          }
+        },
+        {
+          "name": "Create Transaction (Retail Sales — no vendor)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('vendor is null — Sales has no single buyer to name', () => {",
+                  "  pm.expect(pm.response.json().data.transaction.vendor_id).to.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2024-03-06T10:00:00Z\",\n  \"amount\": 150000.00,\n  \"type\": \"income\",\n  \"category\": \"Sales\",\n  \"description\": \"Penjualan ritel tunai\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "`Sales` (aggregate retail revenue) is exempt from the vendor requirement — see `NO_VENDOR_CATEGORIES` in `src/constants/categories.js`. Compare to `B2B Sales`, which names a specific buyer and does require one."
+          }
+        },
+        {
+          "name": "Create Transaction (Payroll — no vendor)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('vendor is null — employees are not vendor records', () => {",
+                  "  pm.expect(pm.response.json().data.transaction.vendor_id).to.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2024-03-25T10:00:00Z\",\n  \"amount\": 8000000.00,\n  \"type\": \"expense\",\n  \"category\": \"Payroll & Benefits\",\n  \"description\": \"Pembayaran gaji bulan Maret\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "The one expense category exempt from the vendor requirement — paid to employees, not a supplier."
+          }
+        },
+        {
+          "name": "List Transactions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('paginated shape', () => {",
+                  "  pm.expect(body.data.transactions).to.be.an('array');",
+                  "  ['page', 'limit', 'total', 'totalPages'].forEach(k => {",
+                  "    pm.expect(body.data.pagination).to.have.property(k);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Also accepts `type`, `category`, and `search` (matches against description) as filters. `limit` is capped at 100 server-side."
+          }
+        },
+        {
+          "name": "List Categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json().data;",
+                  "pm.test('has both catalogs', () => {",
+                  "  pm.expect(data.income).to.include('B2B Sales');",
+                  "  pm.expect(data.expense).to.include('Payroll & Benefits');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "categories"
+              ]
+            },
+            "description": "Returns the category catalog transactions are validated against. Pass `?type=income` or `?type=expense` to filter to one side."
+          }
+        },
+        {
+          "name": "Get Transaction by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json().data.transaction;",
+                  "pm.test('id matches the requested transaction', () => {",
+                  "  pm.expect(t.id).to.eql(Number(pm.collectionVariables.get('transactionId')));",
+                  "});",
+                  "pm.test('enriched with vendor and recorder names', () => {",
+                  "  pm.expect(t).to.have.property('vendor_name');",
+                  "  pm.expect(t).to.have.property('user_fullname');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/{{transactionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "{{transactionId}}"
               ]
             }
+          }
+        },
+        {
+          "name": "Update Transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('description is updated', () => {",
+                  "  pm.expect(pm.response.json().data.transaction.description).to.eql('Updated description');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2000.00,\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transactions/{{transactionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "{{transactionId}}"
+              ]
+            },
+            "description": "Partial update. Trying to null out `vendor_id` on a transaction whose (existing or updated) category still requires one is rejected — see Guards."
           }
         }
       ]
@@ -1226,6 +1438,304 @@
               ],
               "path": [
                 "does-not-exist"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Transactions — input_by_user_id cannot be spoofed",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('recorded under the real caller, not the spoofed id in the body', () => {",
+                  "  const t = pm.response.json().data.transaction;",
+                  "  pm.expect(t.input_by_user_id).to.eql(Number(pm.collectionVariables.get('currentUserId')));",
+                  "  pm.expect(t.input_by_user_id).to.not.eql(999999);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"income\",\n  \"category\": \"Sales\",\n  \"description\": \"Trying to attribute this to someone else\",\n  \"input_by_user_id\": 999999\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "The audit-trail regression test: `input_by_user_id` in the body must be ignored. Only the authenticated session decides who recorded a transaction."
+          }
+        },
+        {
+          "name": "Transactions — B2B Sales without vendor is rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('flags vendor_id specifically', () => {",
+                  "  const errors = pm.response.json().errors;",
+                  "  pm.expect(errors.some(e => e.field === 'vendor_id')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"income\",\n  \"category\": \"B2B Sales\",\n  \"description\": \"Missing vendor on purpose\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "B2B Sales names a specific buying company — omitting `vendor_id` must fail, not silently record an unattributed sale."
+          }
+        },
+        {
+          "name": "Transactions — unknown category is rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('flags category specifically', () => {",
+                  "  const errors = pm.response.json().errors;",
+                  "  pm.expect(errors.some(e => e.field === 'category')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"expense\",\n  \"category\": \"Crypto Mining\",\n  \"description\": \"Not in the catalog\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "`category` must be one of `ALL_CATEGORIES` — free text is rejected, not silently inserted."
+          }
+        },
+        {
+          "name": "Transactions — vendor must actually exist",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));",
+                  "pm.test('reports vendor not found', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('Vendor not found');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"expense\",\n  \"category\": \"Office Supplies\",\n  \"description\": \"Vendor id does not exist\",\n  \"vendor_id\": 999999\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Transactions — update cannot null out a required vendor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('explains why', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('Vendor is required for this category');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vendor_id\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transactions/{{transactionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "{{transactionId}}"
+              ]
+            },
+            "description": "Run after Transactions → Create Transaction (B2B Sales), so `{{transactionId}}` still points at a vendor-requiring category. Checked against the *effective* row (existing category + this patch), not the patch alone."
+          }
+        },
+        {
+          "name": "Transactions — bad pagination params are rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('flags limit specifically', () => {",
+                  "  const errors = pm.response.json().errors;",
+                  "  pm.expect(errors.some(e => e.field === 'limit')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions?limit=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "abc"
+                }
+              ]
+            },
+            "description": "Non-numeric `limit` is rejected outright rather than silently falling back to a default."
+          }
+        },
+        {
+          "name": "Transactions — unknown id returns 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "999999"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Vendors — unknown id returns 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendors/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vendors",
+                "999999"
               ]
             }
           }
