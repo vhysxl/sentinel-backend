@@ -1,0 +1,730 @@
+{
+  "info": {
+    "_postman_id": "b7f3c1a2-9d4e-4f18-8c62-1a5e7d3b9f04",
+    "name": "Sentinel API",
+    "description": "Sentinel Backend — Express + Drizzle.\n\nGrows one folder per module. Sprint 1 ships `Auth` and `Users`; `Vendors` and `Transactions` land next, and the Sprint 2 AI service (`/analyze`, `/chat`) lives in a separate repo and collection.\n\n## Setup\n1. Import `sentinel_local.postman_environment.json` and select it.\n2. Seed a Finance Lead: `npm run db:seed -- lead@company.com \"Nama\"`.\n3. Put that email and password into the `seedEmail` / `seedPassword` variables.\n4. Run **Auth → Login (password)**. It captures `accessToken` and `refreshToken` automatically — every other request reuses them, so no copy-pasting.\n\n## Order that works end to end\nLogin → Users: Create member (captures `memberId` + `tempPassword`) → Users: List → Users: Deactivate member.\n\n`Guards` holds the negative cases. They are meant to fail with a specific status, and their tests assert exactly that — a green run there means the API is refusing what it should.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api/v1", "type": "string" },
+    { "key": "healthUrl", "value": "http://localhost:5000/health", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{healthUrl}}", "host": ["{{healthUrl}}"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('server is up', () => pm.response.to.have.status(200));",
+              "pm.test('reports OK', () => pm.expect(pm.response.json().status).to.eql('OK'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Sign-in, session, and password management. Password login and Google login resolve to the same account by email.",
+      "item": [
+        {
+          "name": "Login (password)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('returns both tokens', () => {",
+                  "  pm.expect(body.data.tokens.accessToken).to.be.a('string');",
+                  "  pm.expect(body.data.tokens.refreshToken).to.be.a('string');",
+                  "});",
+                  "",
+                  "pm.test('never leaks the password hash', () => {",
+                  "  pm.expect(body.data.user).to.not.have.property('passwordHash');",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('accessToken', body.data.tokens.accessToken);",
+                  "pm.collectionVariables.set('refreshToken', body.data.tokens.refreshToken);",
+                  "pm.collectionVariables.set('currentUserId', body.data.user.id);",
+                  "",
+                  "if (body.data.mustChangePassword) {",
+                  "  console.log('This account still holds a temporary password — run Change password next.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{seedEmail}}\",\n  \"password\": \"{{seedPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Email is normalised to lowercase server-side, so casing does not matter."
+          }
+        },
+        {
+          "name": "Login (Google)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Three legitimate outcomes, depending on how far Google is wired up:",
+                  "//   400 — no googleIdToken set in the environment yet",
+                  "//   503 — GOOGLE_CLIENT_ID missing from .env",
+                  "//   200 — fully configured",
+                  "if (pm.response.code === 400) {",
+                  "  pm.test('skipped — set googleIdToken to exercise this', () => {",
+                  "    pm.expect(pm.environment.get('googleIdToken') || '').to.eql('');",
+                  "  });",
+                  "} else if (pm.response.code === 503) {",
+                  "  pm.test('reports Google is not configured', () => {",
+                  "    pm.expect(pm.response.json().message).to.include('not configured');",
+                  "  });",
+                  "} else {",
+                  "  pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('accessToken', body.data.tokens.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', body.data.tokens.refreshToken);",
+                  "",
+                  "  if (body.data.tempPasswordCleared) {",
+                  "    console.log('Temporary password burned. The account is Google-only until it sets its own password.');",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"{{googleIdToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google"]
+            },
+            "description": "Rejects an unregistered email with 403 instead of creating an account — Google proves identity, it does not grant membership.\n\nReturns 503 while GOOGLE_CLIENT_ID is unset."
+          }
+        },
+        {
+          "name": "Me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('no password hash', () => {",
+                  "  pm.expect(pm.response.json().data.user).to.not.have.property('passwordHash');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] },
+            "description": "Returns 401 once the account is deactivated, so sessions already in flight collapse on the next check."
+          }
+        },
+        {
+          "name": "Refresh access token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const token = pm.response.json().data.accessToken;",
+                  "pm.test('returns a new access token', () => pm.expect(token).to.be.a('string'));",
+                  "pm.collectionVariables.set('accessToken', token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "Change password",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Normally you pick your own: put it in the `newPassword` environment",
+                  "// variable and it is sent as-is.",
+                  "//",
+                  "// The generated fallback exists only so an unattended Newman run stays",
+                  "// repeatable — the API rejects a new password identical to the current",
+                  "// one, so a hardcoded value would fail on the second run.",
+                  "const chosen = pm.environment.get('newPassword');",
+                  "pm.collectionVariables.set('nextPassword', chosen || 'Sentinel' + Date.now());",
+                  "",
+                  "if (!chosen) {",
+                  "  console.log('newPassword is empty — generated one instead. Set it to choose your own.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('clears mustChangePassword', () => {",
+                  "  pm.expect(pm.response.json().data.user.mustChangePassword).to.eql(false);",
+                  "});",
+                  "",
+                  "// Roll seedPassword forward so the collection stays runnable.",
+                  "if (pm.response.code === 200) {",
+                  "  pm.environment.set('seedPassword', pm.collectionVariables.get('nextPassword'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{seedPassword}}\",\n  \"newPassword\": \"{{nextPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "change-password"]
+            },
+            "description": "Set `newPassword` in the environment to choose your own. Leave it empty and the pre-request script generates one, purely so unattended runs stay repeatable — check the console for the value it used.\n\nEither way, `seedPassword` is rolled forward on success so the collection keeps working.\n\n`currentPassword` is always required — a pending password change never waives it. Minimum 8 characters, and it must differ from the current one. Returns 400 for a Google-only account; use Set password there."
+          }
+        },
+        {
+          "name": "Set password (Google-only account)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 400 is the correct answer when the account already has a password.",
+                  "if (pm.response.code === 400) {",
+                  "  pm.test('refuses accounts that already have a password', () => {",
+                  "    pm.expect(pm.response.json().message).to.include('already has a password');",
+                  "  });",
+                  "} else {",
+                  "  pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"passwordSendiri123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/set-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "set-password"]
+            },
+            "description": "First password for an account whose hash is NULL. Asks for no current password — the active session is the proof of ownership.\n\nAfterwards the account has two working ways in: password and Google."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "description": "Finance Lead only. These four endpoints are the ONLY place `isAdmin` is checked.",
+      "item": [
+        {
+          "name": "List members",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const users = pm.response.json().data.users;",
+                  "pm.test('every row carries a derived status', () => {",
+                  "  users.forEach(u => pm.expect(['Pending', 'Active', 'Inactive']).to.include(u.status));",
+                  "});",
+                  "pm.test('no password hashes', () => {",
+                  "  users.forEach(u => pm.expect(u).to.not.have.property('passwordHash'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] },
+            "description": "`status` is derived, not stored: never signed in → Pending, deactivated → Inactive, otherwise Active."
+          }
+        },
+        {
+          "name": "Create member",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('returns the temporary password once', () => {",
+                  "  pm.expect(body.data.tempPassword).to.be.a('string');",
+                  "});",
+                  "pm.test('starts as Pending', () => {",
+                  "  pm.expect(body.data.user.status).to.eql('Pending');",
+                  "});",
+                  "pm.test('is not an admin', () => {",
+                  "  pm.expect(body.data.user.isAdmin).to.eql(false);",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('memberId', body.data.user.id);",
+                  "pm.collectionVariables.set('memberEmail', body.data.user.email);",
+                  "pm.collectionVariables.set('tempPassword', body.data.tempPassword);",
+                  "",
+                  "console.log('Temp password captured. No endpoint can read it back — use Reset password if it is lost.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"staff@company.com\",\n  \"fullname\": \"Budi Staff\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] },
+            "description": "Only email and full name — there is no role or department to pick.\n\nThe temporary password appears exactly once in this response. Duplicate email returns 409."
+          }
+        },
+        {
+          "name": "Reset member password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('issues a fresh temporary password', () => {",
+                  "  pm.expect(body.data.tempPassword).to.be.a('string');",
+                  "});",
+                  "pm.collectionVariables.set('tempPassword', body.data.tempPassword);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{memberId}}/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{memberId}}", "reset-password"]
+            },
+            "description": "The only way out for someone who forgot their password, since the system sends no email.\n\nAlso works on a Google-only account, giving it a password route again."
+          }
+        },
+        {
+          "name": "Deactivate member",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('now Inactive', () => {",
+                  "  pm.expect(pm.response.json().data.user.status).to.eql('Inactive');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"isActive\": false\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{memberId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{memberId}}", "status"]
+            },
+            "description": "Never a hard delete — the account is referenced by `transactions.input_by_user_id`, and the audit trail has to survive."
+          }
+        },
+        {
+          "name": "Reactivate member",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('active again', () => {",
+                  "  pm.expect(pm.response.json().data.user.isActive).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"isActive\": true\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{memberId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{memberId}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "Member signs in (arms the non-admin guard)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('member is not an admin', () => {",
+                  "  pm.expect(body.data.user.isAdmin).to.eql(false);",
+                  "});",
+                  "pm.test('must change the temporary password', () => {",
+                  "  pm.expect(body.data.mustChangePassword).to.eql(true);",
+                  "});",
+                  "",
+                  "// Kept apart from accessToken so the admin session survives.",
+                  "pm.environment.set('memberAccessToken', body.data.tokens.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{memberEmail}}\",\n  \"password\": \"{{tempPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Signs in as the member created above using their temporary password, so Guards → non-admin is forbidden has a real non-admin token to work with.\n\nMust run after Reactivate member — a deactivated account cannot sign in."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Guards",
+      "description": "Cases the API must refuse. A green run here means the refusals still work — treat a failure as a security regression, not a broken test.",
+      "item": [
+        {
+          "name": "Login — unknown email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));",
+                  "pm.test('generic message', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('Invalid credentials');",
+                  "});",
+                  "pm.collectionVariables.set('probeUnknownEmail', pm.response.json().message);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nobody@company.com\",\n  \"password\": \"whateverpass\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login — wrong password (must match the previous message)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));",
+                  "",
+                  "// The whole point: an outsider must not be able to tell an unknown",
+                  "// email apart from a wrong password, or they could map the team.",
+                  "const previous = pm.collectionVariables.get('probeUnknownEmail');",
+                  "pm.test('identical to the unknown-email response', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql(previous);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{seedEmail}}\",\n  \"password\": \"definitelyWrong\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Run this straight after the unknown-email request — it compares against the message that one captured."
+          }
+        },
+        {
+          "name": "Users — non-admin is forbidden",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403', () => pm.response.to.have.status(403));",
+                  "pm.test('leaks no user data', () => {",
+                  "  pm.expect(pm.response.json()).to.not.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{memberAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] },
+            "description": "Needs `memberAccessToken`: log in as the created member first, then copy their access token into that variable.\n\nHiding the menu in the UI is not the protection — this is."
+          }
+        },
+        {
+          "name": "Users — cannot deactivate yourself",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('explains why', () => {",
+                  "  pm.expect(pm.response.json().message).to.include('your own account');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"isActive\": false\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{currentUserId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{currentUserId}}", "status"]
+            },
+            "description": "Guards against the last Lead locking themselves out. Only the seed script can grant admin back."
+          }
+        },
+        {
+          "name": "Auth — garbage bearer token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "not.a.real.token", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "Errors — empty body returns field errors, not internals",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('field errors are clean { field, message }', () => {",
+                  "  body.errors.forEach(e => {",
+                  "    pm.expect(e).to.have.property('field');",
+                  "    pm.expect(e).to.have.property('message');",
+                  "    pm.expect(e).to.not.have.property('code');",
+                  "  });",
+                  "});",
+                  "pm.test('no stack trace anywhere', () => {",
+                  "  const raw = pm.response.text();",
+                  "  ['node_modules', 'at Object', 'stack', 'ECONNREFUSED'].forEach(marker => {",
+                  "    pm.expect(raw, `response leaked \"${marker}\"`).to.not.include(marker);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Errors — malformed JSON is masked",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('does not echo the payload back', () => {",
+                  "  pm.expect(pm.response.text()).to.not.include('bad json');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{bad json" },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "body-parser quotes the raw payload in its own message, so that error is masked like any other."
+          }
+        },
+        {
+          "name": "Errors — unknown route",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));",
+                  "pm.test('generic message', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('Resource not found');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/does-not-exist",
+              "host": ["{{baseUrl}}"],
+              "path": ["does-not-exist"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

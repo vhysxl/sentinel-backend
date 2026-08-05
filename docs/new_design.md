@@ -13,7 +13,7 @@ Aplikasi ini bertindak sebagai **Proactive AI Financial Analyst** yang mengaudit
 ## 2. Arsitektur & Teknologi Minimum Viable Product (MVP)
 Berdasarkan evaluasi kebutuhan, arsitektur teknis MVP dirancang sebagai berikut:
 
-*   **Frontend (User Interface):** Aplikasi Web Dashboard berbasis **React (Vite untuk UI sementara; Next.js opsional untuk fase produk)**. Digunakan oleh auditor dan eksekutif untuk meninjau temuan, melihat jejak audit (provenance), dan membaca executive summary.
+*   **Frontend (User Interface):** Aplikasi Web Dashboard berbasis **React (Vite untuk UI sementara; Next.js opsional untuk fase produk)**. Digunakan oleh **tim finance** untuk meninjau temuan, melihat jejak audit (provenance), dan membaca executive summary.
 *   **Backend & Orchestration:** **FastAPI (Python)** sebagai API server. Pada MVP awal, orkestrasi multi-agen dijalankan secara eksplisit di backend menggunakan Python concurrency (`ThreadPoolExecutor`) agar Agent 1 dan Agent 2 bisa berjalan paralel. **LangGraph** diposisikan sebagai opsi fase berikutnya jika workflow membutuhkan state machine, retry per-node, persistence, dan observability yang lebih kuat.
 *   **Database Operasional:** **PostgreSQL**. Dipilih karena dukungan fungsi agregasi analitik SQL yang kuat dan kapabilitas `JSONB` untuk melacak status antar-agen.
 *   **Penyedia LLM:** Menggunakan penyedia LLM tunggal yang bertenaga, yaitu **Gemini API**, untuk memberikan stabilitas dan performa penalaran pada semua agen MVP.
@@ -44,12 +44,16 @@ erDiagram
 ```sql
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    fullname VARCHAR(100),
-    password VARCHAR(255) NOT NULL,
-    role VARCHAR(20) NOT NULL,
-    department VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    email VARCHAR(255) UNIQUE NOT NULL,      -- identitas login
+    fullname VARCHAR(100) NOT NULL,
+    password_hash VARCHAR(255),              -- NULL = akun Google-only
+    google_sub VARCHAR(255) UNIQUE,
+    is_admin BOOLEAN NOT NULL DEFAULT false, -- true = Finance Lead
+    must_change_password BOOLEAN NOT NULL DEFAULT false,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    last_login_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ
 );
 
 CREATE TABLE vendors (
@@ -71,6 +75,16 @@ CREATE TABLE transactions (
     input_by_user_id INT REFERENCES users(id)
 );
 ```
+
+### Pengguna Sistem
+Aplikasi ini dipakai **khusus oleh tim finance**. Tidak ada role-based access control: `is_admin` adalah satu-satunya pembeda hak akses, dan ia hanya menjaga endpoint manajemen user.
+
+| Tipe | Flag | Akses |
+| :--- | :--- | :--- |
+| **Finance Staff** | `is_admin = false` | Seluruh fitur transaksi, vendor, dan temuan |
+| **Finance Lead** | `is_admin = true` | Sama persis + mengelola akun anggota tim |
+
+Semua anggota tim melihat data yang sama persis — tidak ada penyaringan per orang maupun per departemen. Tidak ada registrasi mandiri; akun hanya dibuat oleh Finance Lead. Detail lengkap ada di `auth_user_technical.md` (teknis) dan `auth_user_overview.md` (non-teknis).
 
 ### Skema Komunikasi (*State JSON*)
 Agen mentransmisikan status beserta **Provenance** (jejak data), memisahkan **Evidence** (Objektif vs Semantik), dan melampirkan **Scoring**.
@@ -201,14 +215,14 @@ LLM menyesuaikan skor di atas berdasarkan pemahaman kontekstual dan analisis des
 | **0 - 39** | **Low Risk** | Transaksi wajar. Otomatis disetujui (No Action). |
 | **40 - 59** | **Medium Risk** | Anomali ringan. Dicatat ke dalam audit report bulanan. |
 | **60 - 79** | **High Risk** | Indikasi kecurangan. Butuh verifikasi manual (Manual Review). |
-| **80 - 100** | **Critical Risk** | Indikasi fraud fatal. Eskalasi darurat ke Manajer/CFO. |
+| **80 - 100** | **Critical Risk** | Indikasi fraud fatal. Eskalasi darurat ke Finance Lead. |
 
 ---
 
 ## 7. FAQ: Justifikasi Keputusan Arsitektur MVP
 
 **Q: Mengapa menggunakan antarmuka Web Dashboard (React/Next.js) ketimbang API biasa atau pengiriman Email otomatis?**
-A: Audit finansial membutuhkan visualisasi data dan penjelasan (*explainability*). Web dashboard memungkinkan auditor untuk menelusuri rantai pemikiran agen (*provenance*), mengklik bukti pendukung, dan menyetujui atau menolak temuan AI secara interaktif.
+A: Audit finansial membutuhkan visualisasi data dan penjelasan (*explainability*). Web dashboard memungkinkan tim finance untuk menelusuri rantai pemikiran agen (*provenance*), mengklik bukti pendukung, dan menyetujui atau menolak temuan AI secara interaktif.
 
 **Q: Mengapa MVP memakai FastAPI dengan manual orchestration, bukan langsung LangGraph?**
 A: FastAPI cukup untuk MVP karena workflow masih linear: SQL extraction, Agent 1 dan Agent 2 paralel, scoring aggregator, lalu Agent 3 review. Manual orchestration lebih cepat dibangun dan lebih mudah dijelaskan untuk demo. LangGraph tetap relevan sebagai fase berikutnya jika sistem membutuhkan state machine eksplisit, retry per-node, checkpointing, human-in-the-loop, atau observability workflow yang lebih kuat.
@@ -226,10 +240,10 @@ A: Untuk mencegah halusinasi matematis (Black-box AI). LLM dirancang untuk penal
 A: Karena Agent 1 (Analitik Kuantitatif) dan Agent 2 (Investigator Penipuan Pola) tidak saling membutuhkan data awal satu sama lain, mereka dapat mengeksekusi *tool* SQL secara independen. Mengeksekusi secara berurutan akan melipatgandakan waktu respon, sedangkan eksekusi paralel melalui Python concurrency cukup untuk kebutuhan MVP awal.
 
 **Q: Darimana dasar penetapan bobot poin pada Scoring AI (misalnya Z-score > 5.0 bernilai +40 poin)?**
-A: Dasar scoring ini diadaptasi dari praktik terbaik audit forensik dan kerangka manajemen risiko keuangan (seperti COSO Framework dan ACFE - Association of Certified Fraud Examiners). Pembobotan bersifat heuristik pada versi MVP dan nantinya dikonfigurasi bersama dengan *Subject Matter Expert* (SME) Auditor atau Tim Finance. Nilai tinggi (seperti +40 poin, setara setengah batas kritis) diberikan pada indikator penipuan mutlak seperti transaksi ganda. Sistem ini dirancang secara modular agar perusahaan dapat menyesuaikan (tuning) batas *risk appetite* mereka kapan saja di dalam modul `Scoring Engine`.
+A: Dasar scoring ini diadaptasi dari praktik terbaik audit forensik dan kerangka manajemen risiko keuangan (seperti COSO Framework dan ACFE - Association of Certified Fraud Examiners). Pembobotan bersifat heuristik pada versi MVP dan nantinya dikonfigurasi bersama Finance Lead selaku pemilik kebijakan risiko. Nilai tinggi (seperti +40 poin, setara setengah batas kritis) diberikan pada indikator penipuan mutlak seperti transaksi ganda. Sistem ini dirancang secara modular agar perusahaan dapat menyesuaikan (tuning) batas *risk appetite* mereka kapan saja di dalam modul `Scoring Engine`.
 
 **Q: Bagaimana pertanggungjawaban AI atas temuannya? Apakah hasil evaluasinya dapat dijustifikasi secara audit?**
-A: Sangat bisa dijustifikasi. Aplikasi ini dibangun dengan prinsip *Explainable AI* (XAI). Setiap temuan yang dihasilkan tidak berupa tebakan acak (*black-box*), melainkan secara otomatis melampirkan objek **Provenance** (jejak asal usul data). Objek ini berisi log audit lengkap: *tools* Python apa saja yang dijalankan AI, baris data atau kueri SQL persis apa yang dieksekusi ke *database* (`sql_reference`), serta metrik kuantitatif pasti yang mendasarinya (seperti nilai aktual Z-Score). Melalui arsitektur ini, auditor manusia dapat menelusuri mundur setiap langkah logika AIâ€”dari kesimpulan akhir hingga ke data transaksi mentah asalnyaâ€”memastikan akuntabilitas penuh atas setiap temuan.
+A: Sangat bisa dijustifikasi. Aplikasi ini dibangun dengan prinsip *Explainable AI* (XAI). Setiap temuan yang dihasilkan tidak berupa tebakan acak (*black-box*), melainkan secara otomatis melampirkan objek **Provenance** (jejak asal usul data). Objek ini berisi log audit lengkap: *tools* Python apa saja yang dijalankan AI, baris data atau kueri SQL persis apa yang dieksekusi ke *database* (`sql_reference`), serta metrik kuantitatif pasti yang mendasarinya (seperti nilai aktual Z-Score). Melalui arsitektur ini, anggota tim finance dapat menelusuri mundur setiap langkah logika AIâ€”dari kesimpulan akhir hingga ke data transaksi mentah asalnyaâ€”memastikan akuntabilitas penuh atas setiap temuan.
 
 **Q: Apakah Agent 3 dapat mencari *counter-evidence* (bukti bantahan) terhadap temuan Agent 1 dan Agent 2?**
 A: Betul. Agent 3 bertindak sebagai lapis pertahanan kedua (*quality control*) dengan pendekatan *adversarial*. Jika Agent 1 atau 2 melaporkan indikasi fraud, Agent 3 tidak serta merta mempercayainya. Agent 3 diprogram untuk melakukan "Challenge", yaitu secara aktif mencari *counter-evidence* atau fakta yang melegitimasi transaksi tersebut. Contohnya, jika Agent 1 curiga karena ada "Expense Spike", Agent 3 dapat memanggil *tool* `get_sales_trend()` untuk mengecek apakah lonjakan pengeluaran tersebut sebanding dengan peningkatan *sales* (penjualan). Jika terbukti berbanding lurus, Agent 3 akan memberikan penyesuaian skor negatif (*Semantic Adjustment* minus) guna menurunkan tingkat risiko dan mencegah *false positive* (alarm palsu).
