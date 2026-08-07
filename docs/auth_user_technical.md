@@ -1,6 +1,6 @@
 # Auth & User Service — Spesifikasi Teknis
 
-Acuan tim untuk mendesain modul auth + user, Sprint 1 (tanpa AI service).
+Dokumentasi modul auth + user sebagaimana diimplementasikan, Sprint 1 (tanpa AI service).
 Versi non-teknis: `auth_user_overview.md`.
 
 ---
@@ -45,16 +45,18 @@ users (
 | :--- | :--- | :--- | :--- |
 | POST | `/auth/login` | publik | `{ email, password }` |
 | POST | `/auth/google` | publik | `{ idToken }` |
+| POST | `/auth/refresh` | publik | `{ refreshToken }` → access token baru. Refresh token diverifikasi dengan secret & masa berlaku sendiri, terpisah dari access token |
 | GET | `/auth/me` | login | Profil user aktif |
 | POST | `/auth/change-password` | login | `{ currentPassword, newPassword }` — **400** jika `password_hash` NULL |
 | POST | `/auth/set-password` | login | `{ newPassword }` — **400** jika `password_hash` sudah terisi |
-| POST | `/auth/logout` | login | Hanya perlu jika pakai cookie (OD-2) |
 | GET | `/users` | **admin** | List + status Pending / Active / Inactive |
 | POST | `/users` | **admin** | `{ email, fullname }` → temp password dikembalikan **sekali** |
 | POST | `/users/:id/reset-password` | **admin** | Temp password baru, dikembalikan sekali |
 | PATCH | `/users/:id/status` | **admin** | `{ isActive }` |
 
 Non-admin menembak `/users` → **403**, walaupun menunya sudah disembunyikan di UI. Sembunyikan menu saja tidak dianggap pengamanan.
+
+Tidak ada `POST /auth/logout` — sesuai OD-2 yang sudah terjawab (`localStorage`, bukan cookie), "logout" cukup berarti menghapus token di client, tidak ada state di server yang perlu dibatalkan.
 
 ---
 
@@ -80,6 +82,8 @@ sequenceDiagram
 ```
 
 Email duplikat → **409**. Temp password tidak pernah bisa dibaca ulang lewat endpoint mana pun.
+
+Temp password: 12 karakter acak (`crypto.randomBytes`) dari alfabet yang sengaja membuang huruf/angka yang mirip (`0/O`, `1/l/I`) — karena password ini biasanya dieja lisan atau diketik ulang dari chat.
 
 ### Login password
 
@@ -143,6 +147,11 @@ Untuk user yang `password_hash`-nya NULL — baik karena dibuat tanpa password, 
 
 Dua endpoint terpisah, bukan satu endpoint dengan percabangan — masing-masing punya satu prasyarat yang tegas, sehingga tidak ada celah "lupa mengecek `currentPassword`".
 
+### Refresh token
+Access token berlaku **30 menit** (`JWT_EXPIRES_IN`), refresh token **30 hari** (`JWT_REFRESH_EXPIRES_IN`) — dua JWT yang ditandatangani dengan secret berbeda, bukan salinan satu sama lain. `POST /auth/refresh` hanya menerbitkan access token baru, tidak memperpanjang atau mengganti refresh token.
+
+**Belum dipakai frontend.** Endpoint-nya nyata, tapi `refreshApi()` di `sentinel/lib/services/api.ts` tidak dipanggil di mana pun. Efeknya: `AuthGate` memverifikasi lewat `GET /auth/me` di setiap mount dan langsung logout total begitu itu gagal — termasuk gara-gara access token yang sekadar kedaluwarsa 30 menit, bukan cuma akun yang benar-benar tidak valid. Lihat "Utang teknis" di bawah.
+
 ### Lupa password
 Lead memanggil `/users/:id/reset-password` → temp password baru + `must_change_password = true` → kembali ke alur login password. Berlaku juga untuk akun Google-only, efeknya akun tersebut kembali punya jalur password.
 
@@ -159,20 +168,23 @@ Lead memanggil `/users/:id/reset-password` → temp password baru + `must_change
 - Temp password tidak pernah dapat dibaca ulang.
 - Google login tidak pernah membuat user baru.
 - User dan vendor tidak pernah di-hard-delete.
+- Access token dan refresh token ditandatangani terpisah, dengan secret dan masa berlaku sendiri-sendiri (30 menit vs 30 hari) — bukan satu token yang disalin jadi dua.
 
 ## Open decisions
 
 | # | Pertanyaan | Dampak |
 | :--- | :--- | :--- |
 | OD-1 | Semua staff dijamin punya akun Google? | Jika ya, serah-terima temp password turun jadi jalur cadangan |
-| OD-2 | Token di `localStorage` atau httpOnly cookie? | Cookie memungkinkan guard sisi server di `middleware.ts`, dan membuat `/auth/logout` bermakna |
-| OD-3 | Refresh token benar-benar dibuat? | Sekarang `refreshToken` hanya salinan access token → user ter-logout diam-diam tiap 30 menit |
 | OD-4 | Batasi domain email lewat `hd` Google Workspace? | Jika ya, hanya email kantor yang bisa memakai login Google |
 
+> **Terjawab — OD-2 (token di `localStorage` atau httpOnly cookie?):** **`localStorage`**, dipilih dan didokumentasikan langsung di `auth.store.ts` dan `AuthGate.tsx`. Konsekuensinya disadari dan tertulis sebagai komentar di kode: karena token tidak bisa dibaca server, guard proteksi halaman **tidak bisa** ditegakkan di `proxy.ts` (nama baru `middleware.ts` di versi Next.js ini) dan hanya berjalan di client. Menegakkannya di server butuh pindah ke httpOnly cookie — belum dilakukan.
+>
+> **Terjawab — OD-3 (refresh token benar-benar dibuat?):** **Ya**, backend-nya nyata (lihat "Refresh token" di atas). Tapi gejala yang tadinya dikira soal token palsu (*"user ter-logout diam-diam tiap 30 menit"*) **tetap terjadi**, sebabnya beda: frontend tidak pernah memanggil endpoint ini. Ini sekarang utang teknis murni frontend, bukan lagi open decision.
+>
 > **Terjawab:** *"User Google-only boleh set password pertama?"* → **ya**, lewat `/auth/set-password`. Menghanguskan temp password tidak boleh berarti menghilangkan jalur login password selamanya.
 
 ## Utang teknis yang harus dibereskan
 
-**Backend** — `mustChangePassword` di-hardcode `false`; `refreshToken` diisi salinan access token; `/auth/change-password` dan `/auth/google` belum ada; `cors()` terbuka penuh padahal `config.frontendUrl` tersedia; belum ada rate limiting di login; belum ada error handler terpusat.
+**Backend** — belum ada rate limiting di endpoint login.
 
-**Frontend** — `LoginForm` mengirim `role: 'staff'` yang tidak dikenal backend; skema validasi memakai `currentPassword` tapi pemanggil API mengirim `oldPassword`; tipe `User` di `AuthContext` tidak cocok dengan response backend; `auth.schema.js` masih memuat sisa domain LMS (`studentLoginSchema` dengan validasi NISN, `teacherLoginSchema`); guard halaman hanya di sisi klien.
+**Frontend** — `refreshApi()` sudah ada di `lib/services/api.ts` tapi tidak dipanggil di mana pun, jadi user tetap logout diam-diam begitu access token kedaluwarsa (30 menit) walau refresh token backend-nya berfungsi; guard halaman (`AuthGate`) hanya berjalan di client karena sesi disimpan di `localStorage` — sudah didokumentasikan jujur sebagai komentar di kode, tapi penegakannya di server (httpOnly cookie) belum ada.
