@@ -17,3 +17,5 @@ export {
 } from './transaction.validation.js';
 
 export { createVendorSchema, vendorIdSchema, updateVendorSchema } from './vendor.validation.js';
+
+export { dashboardSummarySchema } from './dashboard.validation.js';
