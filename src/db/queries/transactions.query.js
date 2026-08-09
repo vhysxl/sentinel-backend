@@ -9,9 +9,6 @@ import { users } from '../schema/users.js';
 const listColumns = {
   id: transactions.id,
   created_at: transactions.created_at,
-  // Alias sementara supaya frontend bisa berpindah tanpa deploy serentak.
-  // Dibuang setelah Next.js membaca created_at.
-  transaction_date: transactions.created_at,
   amount: transactions.amount,
   type: transactions.type,
   category: transactions.category,
