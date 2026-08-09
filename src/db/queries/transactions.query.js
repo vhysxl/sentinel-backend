@@ -8,7 +8,10 @@ import { users } from '../schema/users.js';
 // vendor/user names so the frontend doesn't need a second round trip.
 const listColumns = {
   id: transactions.id,
-  transaction_date: transactions.transaction_date,
+  created_at: transactions.created_at,
+  // Alias sementara supaya frontend bisa berpindah tanpa deploy serentak.
+  // Dibuang setelah Next.js membaca created_at.
+  transaction_date: transactions.created_at,
   amount: transactions.amount,
   type: transactions.type,
   category: transactions.category,
@@ -61,7 +64,7 @@ export class TransactionsQuery {
       .leftJoin(vendors, eq(transactions.vendor_id, vendors.id))
       .leftJoin(users, eq(transactions.input_by_user_id, users.id))
       .where(whereClause)
-      .orderBy(desc(transactions.transaction_date))
+      .orderBy(desc(transactions.created_at))
       .limit(limit)
       .offset(offset);
 

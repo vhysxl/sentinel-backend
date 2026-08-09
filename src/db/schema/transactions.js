@@ -5,19 +5,17 @@ import { vendors } from './vendors.js';
 export const transactions = pgTable('transactions', {
   id: serial('id').primaryKey(),
 
-  // Kapan transaksi terjadi menurut pengguna.
+  // SATU-SATUNYA waktu sebuah transaksi.
   //
-  // withTimezone WAJIB. Tanpa itu Postgres menyimpan angka jam apa adanya tanpa
-  // tahu itu jam mana, dan server database ber-timezone GMT — sehingga 09:00 WIB
-  // tersimpan lalu terbaca 02:00. Kolom `users` sudah memakai timestamptz, jadi
-  // ini juga menyamakannya dengan tabel lain.
-  transaction_date: timestamp('transaction_date', { withTimezone: true }).notNull(),
-
-  // Kapan baris ini tercatat ke sistem. Diisi database, TIDAK dikirim dari form.
+  // Transaksi berasal dari mutasi bank: saat bank mencatatnya ITULAH saat
+  // transaksi terjadi. Tidak ada tanggal terpisah yang diketik pengguna, jadi
+  // tidak ada dua makna waktu yang perlu didamaikan — dan tidak ada yang bisa
+  // dipalsukan dengan mengetik, yang penting karena aturan "di luar jam kerja"
+  // di mesin audit dinilai atas kolom ini.
   //
-  // Ini yang dibaca agent server untuk menilai jam kerja: `transaction_date`
-  // diketik pengguna, sehingga aturan "di luar jam kerja" bisa dihindari cukup
-  // dengan mengetik jam yang wajar. `created_at` tidak bisa disentuh dari form.
+  // withTimezone WAJIB. Tanpa itu Postgres menyimpan angka jam tanpa tahu itu
+  // jam mana, dan server database ber-timezone GMT — sehingga 09:00 WIB
+  // tersimpan lalu terbaca 02:00, dan aturan jam kerja terbalik.
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 
   amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),

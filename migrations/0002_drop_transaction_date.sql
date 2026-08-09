@@ -1,0 +1,11 @@
+-- Menghapus transaction_date. Sejak sekarang sebuah transaksi punya SATU waktu:
+-- created_at, yaitu saat mutasi tercatat.
+--
+-- URUTAN DEPLOY — migrasi ini dijalankan TERAKHIR.
+--   1. deploy backend ini (berhenti menulis & membaca transaction_date)
+--   2. deploy Next.js  (date picker dihapus, dashboard/sorting ke created_at)
+--   3. baru jalankan migrasi ini
+-- Dibalik urutannya, kode lama yang masih menulis kolom ini akan gagal.
+--
+-- IF EXISTS supaya aman dijalankan ulang dan di database yang sudah bersih.
+ALTER TABLE "transactions" DROP COLUMN IF EXISTS "transaction_date";

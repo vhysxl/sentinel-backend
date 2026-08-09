@@ -57,7 +57,6 @@ export class TransactionService {
     }
 
     const transaction = await TransactionsQuery.create({
-      transaction_date: new Date(data.transaction_date),
       amount: data.amount.toString(),
       type: data.type,
       category: data.category,
@@ -91,7 +90,6 @@ export class TransactionService {
     }
 
     const updateData = {};
-    if (data.transaction_date) updateData.transaction_date = new Date(data.transaction_date);
     if (data.amount !== undefined) updateData.amount = data.amount.toString();
     if (data.type) updateData.type = data.type;
     if (data.category) updateData.category = data.category;
