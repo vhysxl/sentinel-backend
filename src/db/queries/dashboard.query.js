@@ -4,8 +4,8 @@ import { transactions } from '../schema/transactions.js';
 
 const dateRangeConditions = (startDate, endDate) => {
   const conditions = [];
-  if (startDate) conditions.push(gte(transactions.transaction_date, new Date(startDate)));
-  if (endDate) conditions.push(lte(transactions.transaction_date, new Date(endDate)));
+  if (startDate) conditions.push(gte(transactions.created_at, new Date(startDate)));
+  if (endDate) conditions.push(lte(transactions.created_at, new Date(endDate)));
   return conditions;
 };
 
@@ -31,7 +31,7 @@ export class DashboardQuery {
 
   static async getTrends({ startDate, endDate }) {
     const whereClause = and(...dateRangeConditions(startDate, endDate));
-    const period = sql`TO_CHAR(${transactions.transaction_date}, 'YYYY-MM')`;
+    const period = sql`TO_CHAR(${transactions.created_at} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM')`;
 
     return db
       .select({

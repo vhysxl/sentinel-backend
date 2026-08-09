@@ -8,6 +8,20 @@
       "when": 1785929484629,
       "tag": "0000_init_sentinel_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786290373457,
+      "tag": "0001_transaction_time_and_invoice",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786297099121,
+      "tag": "0002_drop_transaction_date",
+      "breakpoints": true
     }
   ]
 }

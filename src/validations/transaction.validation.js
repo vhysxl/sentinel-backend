@@ -11,9 +11,6 @@ const typeField = z.enum(['income', 'expense'], { message: 'Type must be income 
 export const createTransactionSchema = z.object({
   body: z
     .object({
-      transaction_date: z
-        .string({ required_error: 'Transaction date is required' })
-        .min(1, 'Transaction date is required'),
       amount: z.number({ required_error: 'Amount is required' }).positive('Amount must be positive'),
       type: typeField,
       category: categoryField,
@@ -64,7 +61,6 @@ export const transactionCategoriesQuerySchema = z.object({
 export const updateTransactionSchema = z.object({
   params: idParam,
   body: z.object({
-    transaction_date: z.string().min(1, 'Transaction date is required').optional(),
     amount: z.number().positive('Amount must be positive').optional(),
     type: typeField.optional(),
     category: categoryField.optional(),
