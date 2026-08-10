@@ -46,6 +46,12 @@ export const ERROR_MESSAGES = Object.freeze({
   FINDING_NOT_FOUND: 'Finding not found',
   AGENT_SERVER_UNAVAILABLE: 'The analysis service is unavailable. Please try again shortly.',
 
+  // Analysis runs
+  // The agent server holds a Postgres advisory lock for the duration of a run,
+  // so a second caller is refused outright rather than queued. Worth its own
+  // message: unlike the one above, nothing is broken and retrying later works.
+  ANALYSIS_IN_PROGRESS: 'An analysis is already running. Wait for it to finish.',
+
   // Ask Sentinel
   ASK_FAILED: 'Sentinel could not answer that right now. Please try again shortly.'
 });

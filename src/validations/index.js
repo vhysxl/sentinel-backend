@@ -23,7 +23,8 @@ export { dashboardSummarySchema } from './dashboard.validation.js';
 export {
   listFindingsSchema,
   findingIdSchema,
-  resolveFindingSchema
+  resolveFindingSchema,
+  analyzeFindingsSchema
 } from './finding.validation.js';
 
 export { askSchema } from './ask.validation.js';

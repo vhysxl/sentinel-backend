@@ -30,21 +30,35 @@ const ASK_TIMEOUT_MS = 45_000;
 
 const INTERNAL_KEY_HEADER = 'X-Internal-Key';
 
+/**
+ * Checked per call rather than at boot: a missing key is a findings-only
+ * problem, and refusing to start the whole API over it would take down login
+ * and transactions too. The agent server rejects unkeyed calls anyway, so this
+ * only turns a confusing 401 into a log line that names the cause.
+ */
+function assertAgentKey(method, path) {
+  if (config.agentServerKey) return;
+
+  console.error(
+    `[AGENT] AGENT_SERVER_KEY is not set — refusing to call ${method} ${path}. ` +
+      'It must match INTERNAL_API_KEY on the agent server.'
+  );
+  throw createError(ERROR_MESSAGES.AGENT_SERVER_UNAVAILABLE, HTTP_STATUS.SERVICE_UNAVAILABLE);
+}
+
+/** A rejected key means the two services disagree, never that the user did something wrong. */
+function reportKeyRejected(method, path) {
+  console.error(
+    `[AGENT] ${method} ${path} -> 401: our key was rejected. AGENT_SERVER_KEY here and ` +
+      'INTERNAL_API_KEY on the agent server must be the same non-empty value.'
+  );
+}
+
 async function agentRequest(
   path,
   { method = 'GET', body, timeoutMs = TIMEOUT_MS, notFoundOnError = false } = {}
 ) {
-  // Checked here rather than at boot: a missing key is a findings-only problem,
-  // and refusing to start the whole API over it would take down login and
-  // transactions too. The agent server rejects unkeyed calls anyway, so this
-  // only turns a confusing 401 into a log line that names the cause.
-  if (!config.agentServerKey) {
-    console.error(
-      `[AGENT] AGENT_SERVER_KEY is not set — refusing to call ${method} ${path}. ` +
-        'It must match INTERNAL_API_KEY on the agent server.'
-    );
-    throw createError(ERROR_MESSAGES.AGENT_SERVER_UNAVAILABLE, HTTP_STATUS.SERVICE_UNAVAILABLE);
-  }
+  assertAgentKey(method, path);
 
   const url = `${config.agentServerUrl}${path}`;
   let response;
@@ -78,10 +92,7 @@ async function agentRequest(
   // failing closed. Called out separately so it does not hide among ordinary
   // outages as a generic "unavailable" in the logs.
   if (response.status === HTTP_STATUS.UNAUTHORIZED) {
-    console.error(
-      `[AGENT] ${method} ${path} -> 401: our key was rejected. AGENT_SERVER_KEY here and ` +
-        'INTERNAL_API_KEY on the agent server must be the same non-empty value.'
-    );
+    reportKeyRejected(method, path);
     throw createError(ERROR_MESSAGES.AGENT_SERVER_UNAVAILABLE, HTTP_STATUS.SERVICE_UNAVAILABLE);
   }
 
@@ -146,6 +157,71 @@ export class AgentClient {
   /** Counts for the top of the findings page. */
   static getSummary() {
     return agentRequest('/api/summary');
+  }
+
+  /**
+   * Opens the analysis stream and hands back the raw body for the relay to pump.
+   *
+   * `agentRequest` cannot be reused for this: it awaits `response.json()`, and
+   * its `AbortSignal.timeout` would cut the connection partway through a run
+   * that legitimately takes minutes. What is shared is the part that matters —
+   * the key guard and the mapping of upstream failures onto safe messages.
+   *
+   * Everything that can fail happens here, BEFORE the caller writes a byte.
+   * That is deliberate: once SSE headers are flushed there is no way left to
+   * report an error as an ordinary status code.
+   */
+  static async streamAnalysis({ startDate, endDate, force = false, signal }) {
+    const method = 'POST';
+    const path = '/api/analyze';
+    assertAgentKey(method, path);
+
+    let response;
+    try {
+      response = await fetch(`${config.agentServerUrl}${path}`, {
+        method,
+        headers: {
+          [INTERNAL_KEY_HEADER]: config.agentServerKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ start_date: startDate, end_date: endDate, force }),
+        // No timeout. A backfill is allowed to take as long as it takes; the
+        // caller aborts through `signal` when the browser goes away.
+        signal
+      });
+    } catch (error) {
+      console.error(`[AGENT] ${method} ${path} unreachable: ${error.message}`);
+      throw createError(ERROR_MESSAGES.AGENT_SERVER_UNAVAILABLE, HTTP_STATUS.SERVICE_UNAVAILABLE);
+    }
+
+    // A run already holds the advisory lock. The agent server answers this as a
+    // plain 409 *before* opening the stream, precisely so the refusal can stay
+    // an ordinary response instead of a stream whose only content is an error.
+    // Preserve that here — it is the difference between "try again in a minute"
+    // and "something is broken".
+    if (response.status === HTTP_STATUS.CONFLICT) {
+      throw createError(ERROR_MESSAGES.ANALYSIS_IN_PROGRESS, HTTP_STATUS.CONFLICT);
+    }
+
+    if (response.status === HTTP_STATUS.UNAUTHORIZED) {
+      reportKeyRejected(method, path);
+      throw createError(ERROR_MESSAGES.AGENT_SERVER_UNAVAILABLE, HTTP_STATUS.SERVICE_UNAVAILABLE);
+    }
+
+    if (!response.ok) {
+      console.error(`[AGENT] ${method} ${path} -> ${response.status}`);
+      throw createError(ERROR_MESSAGES.AGENT_SERVER_UNAVAILABLE, HTTP_STATUS.SERVICE_UNAVAILABLE);
+    }
+
+    // A 200 that is not a stream means the upstream contract changed under us.
+    // Better to fail loudly now than to relay a JSON blob as if it were events.
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.includes('text/event-stream') || !response.body) {
+      console.error(`[AGENT] ${method} ${path} -> 200 but content-type was "${contentType}"`);
+      throw createError(ERROR_MESSAGES.AGENT_SERVER_UNAVAILABLE, HTTP_STATUS.SERVICE_UNAVAILABLE);
+    }
+
+    return response.body;
   }
 
   /**

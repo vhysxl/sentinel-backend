@@ -20,6 +20,16 @@ export const notFoundHandler = (req, res) => {
  */
 // eslint-disable-next-line no-unused-vars -- Express identifies error middleware by arity
 export const errorHandler = (err, req, res, next) => {
+  // A streaming route has already sent its status line and headers, so there is
+  // no status code left to set — calling errorResponse here would throw
+  // ERR_HTTP_HEADERS_SENT and take the process with it. Hand back to Express,
+  // which closes the socket. Streaming handlers are expected to report their
+  // own failures in-band before it ever gets this far.
+  if (res.headersSent) {
+    console.error(`[ERROR] ${req.method} ${req.originalUrl} failed after headers were sent:`, err.message);
+    return next(err);
+  }
+
   if (err.isOperational && err.statusCode) {
     console.error(`[ERROR] ${req.method} ${req.originalUrl} -> ${err.statusCode}: ${err.message}`);
     return errorResponse(res, err.message, err.statusCode);

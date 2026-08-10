@@ -27,4 +27,15 @@ export class FindingService {
   static async summary() {
     return await AgentClient.getSummary();
   }
+
+  /**
+   * Starts a backfill and returns the raw upstream stream for the controller to
+   * pump. The service layer stops at "here is the body" on purpose — how it is
+   * framed, heartbeated and torn down is a transport concern, not a domain one.
+   */
+  static async startAnalysis({ startDate, endDate, force, signal }) {
+    const stream = await AgentClient.streamAnalysis({ startDate, endDate, force, signal });
+    console.log(`[FINDINGS][analyze] run started for ${startDate}..${endDate} (force=${force})`);
+    return stream;
+  }
 }

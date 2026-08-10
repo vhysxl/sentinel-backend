@@ -22,6 +22,23 @@ export const findingIdSchema = z.object({
   params: idParam
 });
 
+// The agent server filters on a WIB calendar date, so anything with a time or a
+// timezone in it would be silently truncated. Refused here instead.
+const isoDate = (label) =>
+  z
+    .string({ required_error: `${label} is required` })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, `${label} must be a date in YYYY-MM-DD format`);
+
+export const analyzeFindingsSchema = z.object({
+  body: z.object({
+    startDate: isoDate('Start date'),
+    endDate: isoDate('End date'),
+    // Re-checks transactions already recorded as clean. Off by default so a
+    // second click does not pay the LLM again for work already done.
+    force: z.boolean({ invalid_type_error: 'Force must be true or false' }).optional().default(false)
+  })
+});
+
 export const resolveFindingSchema = z.object({
   params: idParam,
   body: z.object({
