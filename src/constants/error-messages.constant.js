@@ -40,5 +40,12 @@ export const ERROR_MESSAGES = Object.freeze({
 
   // Transactions
   TRANSACTION_NOT_FOUND: 'Transaction not found',
-  VENDOR_REQUIRED_FOR_CATEGORY: 'Vendor is required for this category'
+  VENDOR_REQUIRED_FOR_CATEGORY: 'Vendor is required for this category',
+
+  // Findings
+  FINDING_NOT_FOUND: 'Finding not found',
+  AGENT_SERVER_UNAVAILABLE: 'The analysis service is unavailable. Please try again shortly.',
+
+  // Ask Sentinel
+  ASK_FAILED: 'Sentinel could not answer that right now. Please try again shortly.'
 });
