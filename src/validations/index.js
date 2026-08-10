@@ -19,3 +19,11 @@ export {
 export { createVendorSchema, vendorIdSchema, updateVendorSchema } from './vendor.validation.js';
 
 export { dashboardSummarySchema } from './dashboard.validation.js';
+
+export {
+  listFindingsSchema,
+  findingIdSchema,
+  resolveFindingSchema
+} from './finding.validation.js';
+
+export { askSchema } from './ask.validation.js';
