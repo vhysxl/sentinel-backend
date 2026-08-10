@@ -4,7 +4,7 @@ import { vendors } from './vendors.js';
 
 export const transactions = pgTable('transactions', {
   id: serial('id').primaryKey(),
-  transaction_date: timestamp('transaction_date').notNull(),
+  created_at: timestamp('created_at').notNull(),
   amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
   type: varchar('type', { length: 10 }).notNull(),
   category: varchar('category', { length: 50 }).notNull(),
