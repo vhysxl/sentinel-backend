@@ -32,5 +32,12 @@ jobs:
           AGENT_CONTRACT_URL: ${{ github.workspace }}/agent-contract/openapi/snapshot.json
       - name: Test
         run: npm test
+        # env.config.js validates required vars at import; the test mocks the
+        # query/client layers so nothing is ever dialed, but the process still
+        # exits without these present.
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          JWT_SECRET: ci-test-secret-that-is-long-enough
+          JWT_REFRESH_SECRET: ci-test-refresh-secret-long-enough
       - name: Syntax check
         run: node --check src/server.js && node --check src/app.js
