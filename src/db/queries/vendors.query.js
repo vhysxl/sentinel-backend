@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { db } from '../client.js';
 import { vendors } from '../schema/vendors.js';
 
@@ -13,6 +13,16 @@ export class VendorsQuery {
 
   static async findById(id) {
     const rows = await db.select().from(vendors).where(eq(vendors.id, id)).limit(1);
+    return rows[0] || null;
+  }
+
+  /** Case-insensitive name lookup — imports reference vendors by name. */
+  static async findByName(name) {
+    const rows = await db
+      .select()
+      .from(vendors)
+      .where(sql`lower(${vendors.vendor_name}) = lower(${name})`)
+      .limit(1);
     return rows[0] || null;
   }
 

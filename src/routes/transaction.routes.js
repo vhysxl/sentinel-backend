@@ -4,6 +4,7 @@ import { authenticate } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import {
   createTransactionSchema,
+  importTransactionsSchema,
   listTransactionsSchema,
   transactionCategoriesQuerySchema,
   transactionIdSchema,
@@ -15,6 +16,7 @@ const router = Router();
 router.use(authenticate);
 
 router.post('/', validate(createTransactionSchema), TransactionController.create);
+router.post('/import', validate(importTransactionsSchema), TransactionController.import);
 router.get('/', validate(listTransactionsSchema), TransactionController.list);
 router.get(
   '/categories',
