@@ -12,7 +12,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "node scripts/seed-admin.js",
     "contract:pull": "node scripts/contract-pull.mjs",
-    "contract:check": "node scripts/contract-pull.mjs --check"
+    "contract:check": "node scripts/contract-pull.mjs --check",
+    "test": "node --test \"tests/**/*.test.js\""
   },
   "keywords": [
     "sentinel",

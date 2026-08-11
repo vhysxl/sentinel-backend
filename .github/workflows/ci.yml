@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install
+        run: npm ci
+      - name: Contract check
+        run: npm run contract:check
+        env:
+          AGENT_CONTRACT_URL: https://raw.githubusercontent.com/vhysxl/sentinel-agent-server/main/openapi/snapshot.json
+      - name: Test
+        run: npm test
+      - name: Syntax check
+        run: node --check src/server.js && node --check src/app.js
