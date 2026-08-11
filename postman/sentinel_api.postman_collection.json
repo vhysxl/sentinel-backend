@@ -1,1790 +1,1927 @@
 {
-  "info": {
-    "_postman_id": "b7f3c1a2-9d4e-4f18-8c62-1a5e7d3b9f04",
-    "name": "Sentinel API",
-    "description": "Sentinel Backend — Express + Drizzle.\n\nGrows one folder per module: `Auth`, `Users`, `Vendors`, `Transactions`. The Sprint 2 AI service (`/analyze`, `/chat`) lives in a separate repo and collection.\n\n## Setup\n1. Import `sentinel_local.postman_environment.json` and select it.\n2. Seed a Finance Lead: `npm run db:seed -- lead@company.com \"Nama\"`.\n3. Put that email and password into the `seedEmail` / `seedPassword` variables.\n4. Run **Auth → Login (password)**. It captures `accessToken` and `refreshToken` automatically — every other request reuses them, so no copy-pasting.\n\n## Order that works end to end\nLogin → Users: Create member (captures `memberId` + `tempPassword`) → Users: List → Users: Deactivate member.\n\nSeparately: Login → Vendors: Create Vendor (captures `vendorId`) → Transactions: Create Transaction (B2B Sales) (spends `vendorId`, captures `transactionId`) → Transactions: List / Get / Update.\n\n`Guards` holds the negative cases. They are meant to fail with a specific status, and their tests assert exactly that — a green run there means the API is refusing what it should.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "auth": {
-    "type": "bearer",
-    "bearer": [
-      {
-        "key": "token",
-        "value": "{{accessToken}}",
-        "type": "string"
-      }
-    ]
-  },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:5000/api/v1",
-      "type": "string"
+    "info": {
+        "_postman_id": "b7f3c1a2-9d4e-4f18-8c62-1a5e7d3b9f04",
+        "name": "Sentinel API",
+        "description": "Sentinel Backend \u00e2\u20ac\u201d Express + Drizzle.\n\nGrows one folder per module: `Auth`, `Users`, `Vendors`, `Transactions`. The Sprint 2 AI service (`/analyze`, `/chat`) lives in a separate repo and collection.\n\n## Setup\n1. Import `sentinel_local.postman_environment.json` and select it.\n2. Seed a Finance Lead: `npm run db:seed -- lead@company.com \"Nama\"`.\n3. Put that email and password into the `seedEmail` / `seedPassword` variables.\n4. Run **Auth \u00e2\u2020\u2019 Login (password)**. It captures `accessToken` and `refreshToken` automatically \u00e2\u20ac\u201d every other request reuses them, so no copy-pasting.\n\n## Order that works end to end\nLogin \u00e2\u2020\u2019 Users: Create member (captures `memberId` + `tempPassword`) \u00e2\u2020\u2019 Users: List \u00e2\u2020\u2019 Users: Deactivate member.\n\nSeparately: Login \u00e2\u2020\u2019 Vendors: Create Vendor (captures `vendorId`) \u00e2\u2020\u2019 Transactions: Create Transaction (B2B Sales) (spends `vendorId`, captures `transactionId`) \u00e2\u2020\u2019 Transactions: List / Get / Update.\n\n`Guards` holds the negative cases. They are meant to fail with a specific status, and their tests assert exactly that \u00e2\u20ac\u201d a green run there means the API is refusing what it should.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
-    {
-      "key": "healthUrl",
-      "value": "http://localhost:5000/health",
-      "type": "string"
-    }
-  ],
-  "item": [
-    {
-      "name": "Health",
-      "request": {
-        "auth": {
-          "type": "noauth"
-        },
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "{{healthUrl}}",
-          "host": [
-            "{{healthUrl}}"
-          ]
-        }
-      },
-      "event": [
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{accessToken}}",
+                "type": "string"
+            }
+        ]
+    },
+    "variable": [
         {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test('server is up', () => pm.response.to.have.status(200));",
-              "pm.test('reports OK', () => pm.expect(pm.response.json().status).to.eql('OK'));"
+            "key": "baseUrl",
+            "value": "http://localhost:5000/api/v1",
+            "type": "string"
+        },
+        {
+            "key": "healthUrl",
+            "value": "http://localhost:5000/health",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "Health",
+            "request": {
+                "auth": {
+                    "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{healthUrl}}",
+                    "host": [
+                        "{{healthUrl}}"
+                    ]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('server is up', () => pm.response.to.have.status(200));",
+                            "pm.test('reports OK', () => pm.expect(pm.response.json().status).to.eql('OK'));"
+                        ]
+                    }
+                }
             ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "Auth",
-      "description": "Sign-in, session, and password management. Password login and Google login resolve to the same account by email.",
-      "item": [
-        {
-          "name": "Login (password)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "",
-                  "const body = pm.response.json();",
-                  "pm.test('returns both tokens', () => {",
-                  "  pm.expect(body.data.tokens.accessToken).to.be.a('string');",
-                  "  pm.expect(body.data.tokens.refreshToken).to.be.a('string');",
-                  "});",
-                  "",
-                  "pm.test('never leaks the password hash', () => {",
-                  "  pm.expect(body.data.user).to.not.have.property('passwordHash');",
-                  "});",
-                  "",
-                  "pm.collectionVariables.set('accessToken', body.data.tokens.accessToken);",
-                  "pm.collectionVariables.set('refreshToken', body.data.tokens.refreshToken);",
-                  "pm.collectionVariables.set('currentUserId', body.data.user.id);",
-                  "",
-                  "if (body.data.mustChangePassword) {",
-                  "  console.log('This account still holds a temporary password — run Change password next.');",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{seedEmail}}\",\n  \"password\": \"{{seedPassword}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "login"
-              ]
-            },
-            "description": "Email is normalised to lowercase server-side, so casing does not matter."
-          }
         },
         {
-          "name": "Login (Google)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Three legitimate outcomes, depending on how far Google is wired up:",
-                  "//   400 — no googleIdToken set in the environment yet",
-                  "//   503 — GOOGLE_CLIENT_ID missing from .env",
-                  "//   200 — fully configured",
-                  "if (pm.response.code === 400) {",
-                  "  pm.test('skipped — set googleIdToken to exercise this', () => {",
-                  "    pm.expect(pm.environment.get('googleIdToken') || '').to.eql('');",
-                  "  });",
-                  "} else if (pm.response.code === 503) {",
-                  "  pm.test('reports Google is not configured', () => {",
-                  "    pm.expect(pm.response.json().message).to.include('not configured');",
-                  "  });",
-                  "} else {",
-                  "  pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "  const body = pm.response.json();",
-                  "  pm.collectionVariables.set('accessToken', body.data.tokens.accessToken);",
-                  "  pm.collectionVariables.set('refreshToken', body.data.tokens.refreshToken);",
-                  "",
-                  "  if (body.data.tempPasswordCleared) {",
-                  "    console.log('Temporary password burned. The account is Google-only until it sets its own password.');",
-                  "  }",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"idToken\": \"{{googleIdToken}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/google",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "google"
-              ]
-            },
-            "description": "Rejects an unregistered email with 403 instead of creating an account — Google proves identity, it does not grant membership.\n\nReturns 503 while GOOGLE_CLIENT_ID is unset."
-          }
-        },
-        {
-          "name": "Me",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('no password hash', () => {",
-                  "  pm.expect(pm.response.json().data.user).to.not.have.property('passwordHash');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/auth/me",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "me"
-              ]
-            },
-            "description": "Returns 401 once the account is deactivated, so sessions already in flight collapse on the next check."
-          }
-        },
-        {
-          "name": "Refresh access token",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const token = pm.response.json().data.accessToken;",
-                  "pm.test('returns a new access token', () => pm.expect(token).to.be.a('string'));",
-                  "pm.collectionVariables.set('accessToken', token);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/refresh",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "refresh"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Change password",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Normally you pick your own: put it in the `newPassword` environment",
-                  "// variable and it is sent as-is.",
-                  "//",
-                  "// The generated fallback exists only so an unattended Newman run stays",
-                  "// repeatable — the API rejects a new password identical to the current",
-                  "// one, so a hardcoded value would fail on the second run.",
-                  "const chosen = pm.environment.get('newPassword');",
-                  "pm.collectionVariables.set('nextPassword', chosen || 'Sentinel' + Date.now());",
-                  "",
-                  "if (!chosen) {",
-                  "  console.log('newPassword is empty — generated one instead. Set it to choose your own.');",
-                  "}"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('clears mustChangePassword', () => {",
-                  "  pm.expect(pm.response.json().data.user.mustChangePassword).to.eql(false);",
-                  "});",
-                  "",
-                  "// Roll seedPassword forward so the collection stays runnable.",
-                  "if (pm.response.code === 200) {",
-                  "  pm.environment.set('seedPassword', pm.collectionVariables.get('nextPassword'));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"currentPassword\": \"{{seedPassword}}\",\n  \"newPassword\": \"{{nextPassword}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/change-password",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "change-password"
-              ]
-            },
-            "description": "Set `newPassword` in the environment to choose your own. Leave it empty and the pre-request script generates one, purely so unattended runs stay repeatable — check the console for the value it used.\n\nEither way, `seedPassword` is rolled forward on success so the collection keeps working.\n\n`currentPassword` is always required — a pending password change never waives it. Minimum 8 characters, and it must differ from the current one. Returns 400 for a Google-only account; use Set password there."
-          }
-        },
-        {
-          "name": "Set password (Google-only account)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// 400 is the correct answer when the account already has a password.",
-                  "if (pm.response.code === 400) {",
-                  "  pm.test('refuses accounts that already have a password', () => {",
-                  "    pm.expect(pm.response.json().message).to.include('already has a password');",
-                  "  });",
-                  "} else {",
-                  "  pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"newPassword\": \"passwordSendiri123\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/set-password",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "set-password"
-              ]
-            },
-            "description": "First password for an account whose hash is NULL. Asks for no current password — the active session is the proof of ownership.\n\nAfterwards the account has two working ways in: password and Google."
-          }
-        }
-      ]
-    },
-    {
-      "name": "Users",
-      "description": "Finance Lead only. These four endpoints are the ONLY place `isAdmin` is checked.",
-      "item": [
-        {
-          "name": "List members",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const users = pm.response.json().data.users;",
-                  "pm.test('every row carries a derived status', () => {",
-                  "  users.forEach(u => pm.expect(['Pending', 'Active', 'Inactive']).to.include(u.status));",
-                  "});",
-                  "pm.test('no password hashes', () => {",
-                  "  users.forEach(u => pm.expect(u).to.not.have.property('passwordHash'));",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "users"
-              ]
-            },
-            "description": "`status` is derived, not stored: never signed in → Pending, deactivated → Inactive, otherwise Active."
-          }
-        },
-        {
-          "name": "Create member",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                  "",
-                  "const body = pm.response.json();",
-                  "pm.test('returns the temporary password once', () => {",
-                  "  pm.expect(body.data.tempPassword).to.be.a('string');",
-                  "});",
-                  "pm.test('starts as Pending', () => {",
-                  "  pm.expect(body.data.user.status).to.eql('Pending');",
-                  "});",
-                  "pm.test('is not an admin', () => {",
-                  "  pm.expect(body.data.user.isAdmin).to.eql(false);",
-                  "});",
-                  "",
-                  "pm.collectionVariables.set('memberId', body.data.user.id);",
-                  "pm.collectionVariables.set('memberEmail', body.data.user.email);",
-                  "pm.collectionVariables.set('tempPassword', body.data.tempPassword);",
-                  "",
-                  "console.log('Temp password captured. No endpoint can read it back — use Reset password if it is lost.');"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"staff@company.com\",\n  \"fullname\": \"Budi Staff\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "users"
-              ]
-            },
-            "description": "Only email and full name — there is no role or department to pick.\n\nThe temporary password appears exactly once in this response. Duplicate email returns 409."
-          }
-        },
-        {
-          "name": "Reset member password",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('issues a fresh temporary password', () => {",
-                  "  pm.expect(body.data.tempPassword).to.be.a('string');",
-                  "});",
-                  "pm.collectionVariables.set('tempPassword', body.data.tempPassword);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{memberId}}/reset-password",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "users",
-                "{{memberId}}",
-                "reset-password"
-              ]
-            },
-            "description": "The only way out for someone who forgot their password, since the system sends no email.\n\nAlso works on a Google-only account, giving it a password route again."
-          }
-        },
-        {
-          "name": "Deactivate member",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('now Inactive', () => {",
-                  "  pm.expect(pm.response.json().data.user.status).to.eql('Inactive');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"isActive\": false\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{memberId}}/status",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "users",
-                "{{memberId}}",
-                "status"
-              ]
-            },
-            "description": "Never a hard delete — the account is referenced by `transactions.input_by_user_id`, and the audit trail has to survive."
-          }
-        },
-        {
-          "name": "Reactivate member",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('active again', () => {",
-                  "  pm.expect(pm.response.json().data.user.isActive).to.eql(true);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"isActive\": true\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{memberId}}/status",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "users",
-                "{{memberId}}",
-                "status"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Member signs in (arms the non-admin guard)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "",
-                  "const body = pm.response.json();",
-                  "pm.test('member is not an admin', () => {",
-                  "  pm.expect(body.data.user.isAdmin).to.eql(false);",
-                  "});",
-                  "pm.test('must change the temporary password', () => {",
-                  "  pm.expect(body.data.mustChangePassword).to.eql(true);",
-                  "});",
-                  "",
-                  "// Kept apart from accessToken so the admin session survives.",
-                  "pm.environment.set('memberAccessToken', body.data.tokens.accessToken);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{memberEmail}}\",\n  \"password\": \"{{tempPassword}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "login"
-              ]
-            },
-            "description": "Signs in as the member created above using their temporary password, so Guards → non-admin is forbidden has a real non-admin token to work with.\n\nMust run after Reactivate member — a deactivated account cannot sign in."
-          }
-        }
-      ]
-    },
-    {
-      "name": "Vendors",
-      "description": "Companies on the other side of a transaction — a supplier being paid, or (for `B2B Sales`) the buyer. No Delete endpoint: a vendor is retired by setting `status: \"inactive\"`, same pattern as Users.",
-      "item": [
-        {
-          "name": "Create Vendor",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                  "",
-                  "const body = pm.response.json();",
-                  "pm.test('defaults status to active', () => {",
-                  "  pm.expect(body.data.vendor.status).to.eql('active');",
-                  "});",
-                  "",
-                  "pm.collectionVariables.set('vendorId', body.data.vendor.id);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"vendor_name\": \"PT Sejahtera Bersama\",\n  \"bank_account\": \"BCA 12345678\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/vendors",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "vendors"
-              ]
-            },
-            "description": "`status` defaults to `active` when omitted. Captures `vendorId`, spent by Transactions → Create Transaction (B2B Sales)."
-          }
-        },
-        {
-          "name": "List Vendors",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('returns an array', () => {",
-                  "  pm.expect(pm.response.json().data.vendors).to.be.an('array');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/vendors",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "vendors"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Vendor by ID",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('id matches the requested vendor', () => {",
-                  "  pm.expect(pm.response.json().data.vendor.id).to.eql(Number(pm.collectionVariables.get('vendorId')));",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/vendors/{{vendorId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "vendors",
-                "{{vendorId}}"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Update Vendor",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('name is updated', () => {",
-                  "  pm.expect(body.data.vendor.vendor_name).to.eql('PT Sejahtera Terus');",
-                  "});",
-                  "pm.test('status is updated', () => {",
-                  "  pm.expect(body.data.vendor.status).to.eql('inactive');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"vendor_name\": \"PT Sejahtera Terus\",\n  \"status\": \"inactive\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/vendors/{{vendorId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "vendors",
-                "{{vendorId}}"
-              ]
-            },
-            "description": "Partial update — only sent fields change. Setting `status: \"inactive\"` is how a vendor is retired; there is no delete endpoint."
-          }
-        }
-      ]
-    },
-    {
-      "name": "Transactions",
-      "description": "Create, Read, Update for transactions — no Delete, financial records aren't destroyed. Run the Create requests before Get/Update; they capture `transactionId`. `Create Transaction (B2B Sales)` spends `vendorId`, so run Vendors → Create Vendor first.",
-      "item": [
-        {
-          "name": "Create Transaction (B2B Sales)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                  "",
-                  "const body = pm.response.json();",
-                  "pm.test('recorded under the logged-in user, not a client-supplied id', () => {",
-                  "  pm.expect(body.data.transaction.input_by_user_id).to.eql(Number(pm.collectionVariables.get('currentUserId')));",
-                  "});",
-                  "pm.test('vendor is attached', () => {",
-                  "  pm.expect(body.data.transaction.vendor_id).to.eql(Number(pm.collectionVariables.get('vendorId')));",
-                  "});",
-                  "",
-                  "pm.collectionVariables.set('transactionId', body.data.transaction.id);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 5000000.00,\n  \"type\": \"income\",\n  \"category\": \"B2B Sales\",\n  \"description\": \"Penjualan B2B ke vendor\",\n  \"vendor_id\": {{vendorId}}\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ]
-            },
-            "description": "`B2B Sales` names a specific buying company, so `vendor_id` is required — reuses the vendor created in Vendors → Create Vendor.\n\n`input_by_user_id` is never read from the body; it is always the authenticated caller. Captures `transactionId`."
-          }
-        },
-        {
-          "name": "Create Transaction (Retail Sales — no vendor)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                  "pm.test('vendor is null — Sales has no single buyer to name', () => {",
-                  "  pm.expect(pm.response.json().data.transaction.vendor_id).to.be.null;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transaction_date\": \"2024-03-06T10:00:00Z\",\n  \"amount\": 150000.00,\n  \"type\": \"income\",\n  \"category\": \"Sales\",\n  \"description\": \"Penjualan ritel tunai\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ]
-            },
-            "description": "`Sales` (aggregate retail revenue) is exempt from the vendor requirement — see `NO_VENDOR_CATEGORIES` in `src/constants/categories.js`. Compare to `B2B Sales`, which names a specific buyer and does require one."
-          }
-        },
-        {
-          "name": "Create Transaction (Payroll — no vendor)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                  "pm.test('vendor is null — employees are not vendor records', () => {",
-                  "  pm.expect(pm.response.json().data.transaction.vendor_id).to.be.null;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transaction_date\": \"2024-03-25T10:00:00Z\",\n  \"amount\": 8000000.00,\n  \"type\": \"expense\",\n  \"category\": \"Payroll & Benefits\",\n  \"description\": \"Pembayaran gaji bulan Maret\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ]
-            },
-            "description": "The one expense category exempt from the vendor requirement — paid to employees, not a supplier."
-          }
-        },
-        {
-          "name": "List Transactions",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('paginated shape', () => {",
-                  "  pm.expect(body.data.transactions).to.be.an('array');",
-                  "  ['page', 'limit', 'total', 'totalPages'].forEach(k => {",
-                  "    pm.expect(body.data.pagination).to.have.property(k);",
-                  "  });",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/transactions?page=1&limit=10",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ],
-              "query": [
+            "name": "Auth",
+            "description": "Sign-in, session, and password management. Password login and Google login resolve to the same account by email.",
+            "item": [
                 {
-                  "key": "page",
-                  "value": "1"
+                    "name": "Login (password)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "",
+                                    "const body = pm.response.json();",
+                                    "pm.test('returns both tokens', () => {",
+                                    "  pm.expect(body.data.tokens.accessToken).to.be.a('string');",
+                                    "  pm.expect(body.data.tokens.refreshToken).to.be.a('string');",
+                                    "});",
+                                    "",
+                                    "pm.test('never leaks the password hash', () => {",
+                                    "  pm.expect(body.data.user).to.not.have.property('passwordHash');",
+                                    "});",
+                                    "",
+                                    "pm.collectionVariables.set('accessToken', body.data.tokens.accessToken);",
+                                    "pm.collectionVariables.set('refreshToken', body.data.tokens.refreshToken);",
+                                    "pm.collectionVariables.set('currentUserId', body.data.user.id);",
+                                    "",
+                                    "if (body.data.mustChangePassword) {",
+                                    "  console.log('This account still holds a temporary password \u00e2\u20ac\u201d run Change password next.');",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"{{seedEmail}}\",\n  \"password\": \"{{seedPassword}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "description": "Email is normalised to lowercase server-side, so casing does not matter."
+                    }
                 },
                 {
-                  "key": "limit",
-                  "value": "10"
-                }
-              ]
-            },
-            "description": "Also accepts `type`, `category`, and `search` (matches against description) as filters. `limit` is capped at 100 server-side."
-          }
-        },
-        {
-          "name": "List Categories",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const data = pm.response.json().data;",
-                  "pm.test('has both catalogs', () => {",
-                  "  pm.expect(data.income).to.include('B2B Sales');",
-                  "  pm.expect(data.expense).to.include('Payroll & Benefits');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/transactions/categories",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions",
-                "categories"
-              ]
-            },
-            "description": "Returns the category catalog transactions are validated against. Pass `?type=income` or `?type=expense` to filter to one side."
-          }
-        },
-        {
-          "name": "Get Transaction by ID",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const t = pm.response.json().data.transaction;",
-                  "pm.test('id matches the requested transaction', () => {",
-                  "  pm.expect(t.id).to.eql(Number(pm.collectionVariables.get('transactionId')));",
-                  "});",
-                  "pm.test('enriched with vendor and recorder names', () => {",
-                  "  pm.expect(t).to.have.property('vendor_name');",
-                  "  pm.expect(t).to.have.property('user_fullname');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/transactions/{{transactionId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions",
-                "{{transactionId}}"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Update Transaction",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('description is updated', () => {",
-                  "  pm.expect(pm.response.json().data.transaction.description).to.eql('Updated description');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"amount\": 2000.00,\n  \"description\": \"Updated description\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions/{{transactionId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions",
-                "{{transactionId}}"
-              ]
-            },
-            "description": "Partial update. Trying to null out `vendor_id` on a transaction whose (existing or updated) category still requires one is rejected — see Guards."
-          }
-        }
-      ]
-    },
-    {
-      "name": "Guards",
-      "description": "Cases the API must refuse. A green run here means the refusals still work — treat a failure as a security regression, not a broken test.",
-      "item": [
-        {
-          "name": "Login — unknown email",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('401', () => pm.response.to.have.status(401));",
-                  "pm.test('generic message', () => {",
-                  "  pm.expect(pm.response.json().message).to.eql('Invalid credentials');",
-                  "});",
-                  "pm.collectionVariables.set('probeUnknownEmail', pm.response.json().message);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"nobody@company.com\",\n  \"password\": \"whateverpass\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "login"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Login — wrong password (must match the previous message)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('401', () => pm.response.to.have.status(401));",
-                  "",
-                  "// The whole point: an outsider must not be able to tell an unknown",
-                  "// email apart from a wrong password, or they could map the team.",
-                  "const previous = pm.collectionVariables.get('probeUnknownEmail');",
-                  "pm.test('identical to the unknown-email response', () => {",
-                  "  pm.expect(pm.response.json().message).to.eql(previous);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{seedEmail}}\",\n  \"password\": \"definitelyWrong\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "login"
-              ]
-            },
-            "description": "Run this straight after the unknown-email request — it compares against the message that one captured."
-          }
-        },
-        {
-          "name": "Users — non-admin is forbidden",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('403', () => pm.response.to.have.status(403));",
-                  "pm.test('leaks no user data', () => {",
-                  "  pm.expect(pm.response.json()).to.not.have.property('data');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{memberAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            },
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "users"
-              ]
-            },
-            "description": "Needs `memberAccessToken`: log in as the created member first, then copy their access token into that variable.\n\nHiding the menu in the UI is not the protection — this is."
-          }
-        },
-        {
-          "name": "Users — cannot deactivate yourself",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('400', () => pm.response.to.have.status(400));",
-                  "pm.test('explains why', () => {",
-                  "  pm.expect(pm.response.json().message).to.include('your own account');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"isActive\": false\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{currentUserId}}/status",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "users",
-                "{{currentUserId}}",
-                "status"
-              ]
-            },
-            "description": "Guards against the last Lead locking themselves out. Only the seed script can grant admin back."
-          }
-        },
-        {
-          "name": "Auth — garbage bearer token",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('401', () => pm.response.to.have.status(401));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "not.a.real.token",
-                  "type": "string"
-                }
-              ]
-            },
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/auth/me",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "me"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Errors — empty body returns field errors, not internals",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('400', () => pm.response.to.have.status(400));",
-                  "const body = pm.response.json();",
-                  "pm.test('field errors are clean { field, message }', () => {",
-                  "  body.errors.forEach(e => {",
-                  "    pm.expect(e).to.have.property('field');",
-                  "    pm.expect(e).to.have.property('message');",
-                  "    pm.expect(e).to.not.have.property('code');",
-                  "  });",
-                  "});",
-                  "pm.test('no stack trace anywhere', () => {",
-                  "  const raw = pm.response.text();",
-                  "  ['node_modules', 'at Object', 'stack', 'ECONNREFUSED'].forEach(marker => {",
-                  "    pm.expect(raw, `response leaked \"${marker}\"`).to.not.include(marker);",
-                  "  });",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "login"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Errors — malformed JSON is masked",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('400', () => pm.response.to.have.status(400));",
-                  "pm.test('does not echo the payload back', () => {",
-                  "  pm.expect(pm.response.text()).to.not.include('bad json');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{bad json"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "login"
-              ]
-            },
-            "description": "body-parser quotes the raw payload in its own message, so that error is masked like any other."
-          }
-        },
-        {
-          "name": "Errors — unknown route",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('404', () => pm.response.to.have.status(404));",
-                  "pm.test('generic message', () => {",
-                  "  pm.expect(pm.response.json().message).to.eql('Resource not found');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/does-not-exist",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "does-not-exist"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Transactions — input_by_user_id cannot be spoofed",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                  "pm.test('recorded under the real caller, not the spoofed id in the body', () => {",
-                  "  const t = pm.response.json().data.transaction;",
-                  "  pm.expect(t.input_by_user_id).to.eql(Number(pm.collectionVariables.get('currentUserId')));",
-                  "  pm.expect(t.input_by_user_id).to.not.eql(999999);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"income\",\n  \"category\": \"Sales\",\n  \"description\": \"Trying to attribute this to someone else\",\n  \"input_by_user_id\": 999999\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ]
-            },
-            "description": "The audit-trail regression test: `input_by_user_id` in the body must be ignored. Only the authenticated session decides who recorded a transaction."
-          }
-        },
-        {
-          "name": "Transactions — B2B Sales without vendor is rejected",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('400', () => pm.response.to.have.status(400));",
-                  "pm.test('flags vendor_id specifically', () => {",
-                  "  const errors = pm.response.json().errors;",
-                  "  pm.expect(errors.some(e => e.field === 'vendor_id')).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"income\",\n  \"category\": \"B2B Sales\",\n  \"description\": \"Missing vendor on purpose\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ]
-            },
-            "description": "B2B Sales names a specific buying company — omitting `vendor_id` must fail, not silently record an unattributed sale."
-          }
-        },
-        {
-          "name": "Transactions — unknown category is rejected",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('400', () => pm.response.to.have.status(400));",
-                  "pm.test('flags category specifically', () => {",
-                  "  const errors = pm.response.json().errors;",
-                  "  pm.expect(errors.some(e => e.field === 'category')).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"expense\",\n  \"category\": \"Crypto Mining\",\n  \"description\": \"Not in the catalog\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ]
-            },
-            "description": "`category` must be one of `ALL_CATEGORIES` — free text is rejected, not silently inserted."
-          }
-        },
-        {
-          "name": "Transactions — vendor must actually exist",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('404', () => pm.response.to.have.status(404));",
-                  "pm.test('reports vendor not found', () => {",
-                  "  pm.expect(pm.response.json().message).to.eql('Vendor not found');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"expense\",\n  \"category\": \"Office Supplies\",\n  \"description\": \"Vendor id does not exist\",\n  \"vendor_id\": 999999\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Transactions — update cannot null out a required vendor",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('400', () => pm.response.to.have.status(400));",
-                  "pm.test('explains why', () => {",
-                  "  pm.expect(pm.response.json().message).to.eql('Vendor is required for this category');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"vendor_id\": null\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/transactions/{{transactionId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions",
-                "{{transactionId}}"
-              ]
-            },
-            "description": "Run after Transactions → Create Transaction (B2B Sales), so `{{transactionId}}` still points at a vendor-requiring category. Checked against the *effective* row (existing category + this patch), not the patch alone."
-          }
-        },
-        {
-          "name": "Transactions — bad pagination params are rejected",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('400', () => pm.response.to.have.status(400));",
-                  "pm.test('flags limit specifically', () => {",
-                  "  const errors = pm.response.json().errors;",
-                  "  pm.expect(errors.some(e => e.field === 'limit')).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/transactions?limit=abc",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ],
-              "query": [
-                {
-                  "key": "limit",
-                  "value": "abc"
-                }
-              ]
-            },
-            "description": "Non-numeric `limit` is rejected outright rather than silently falling back to a default."
-          }
-        },
-        {
-          "name": "Transactions — unknown id returns 404",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('404', () => pm.response.to.have.status(404));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/transactions/999999",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions",
-                "999999"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Vendors — unknown id returns 404",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('404', () => pm.response.to.have.status(404));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/vendors/999999",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "vendors",
-                "999999"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Dashboard",
-      "item": [
-        {
-          "name": "Get Dashboard Summary",
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}",
-                  "type": "string"
-                }
-              ]
-            },
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/dashboard?startDate=2024-01-01&endDate=2024-12-31",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "dashboard"
-              ],
-              "query": [
-                {
-                  "key": "startDate",
-                  "value": "2024-01-01",
-                  "description": "Optional start date"
+                    "name": "Login (Google)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "// Three legitimate outcomes, depending on how far Google is wired up:",
+                                    "//   400 \u00e2\u20ac\u201d no googleIdToken set in the environment yet",
+                                    "//   503 \u00e2\u20ac\u201d GOOGLE_CLIENT_ID missing from .env",
+                                    "//   200 \u00e2\u20ac\u201d fully configured",
+                                    "if (pm.response.code === 400) {",
+                                    "  pm.test('skipped \u00e2\u20ac\u201d set googleIdToken to exercise this', () => {",
+                                    "    pm.expect(pm.environment.get('googleIdToken') || '').to.eql('');",
+                                    "  });",
+                                    "} else if (pm.response.code === 503) {",
+                                    "  pm.test('reports Google is not configured', () => {",
+                                    "    pm.expect(pm.response.json().message).to.include('not configured');",
+                                    "  });",
+                                    "} else {",
+                                    "  pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "  const body = pm.response.json();",
+                                    "  pm.collectionVariables.set('accessToken', body.data.tokens.accessToken);",
+                                    "  pm.collectionVariables.set('refreshToken', body.data.tokens.refreshToken);",
+                                    "",
+                                    "  if (body.data.tempPasswordCleared) {",
+                                    "    console.log('Temporary password burned. The account is Google-only until it sets its own password.');",
+                                    "  }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"idToken\": \"{{googleIdToken}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/google",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "google"
+                            ]
+                        },
+                        "description": "Rejects an unregistered email with 403 instead of creating an account \u00e2\u20ac\u201d Google proves identity, it does not grant membership.\n\nReturns 503 while GOOGLE_CLIENT_ID is unset."
+                    }
                 },
                 {
-                  "key": "endDate",
-                  "value": "2024-12-31",
-                  "description": "Optional end date"
+                    "name": "Me",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "pm.test('no password hash', () => {",
+                                    "  pm.expect(pm.response.json().data.user).to.not.have.property('passwordHash');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/me",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "me"
+                            ]
+                        },
+                        "description": "Returns 401 once the account is deactivated, so sessions already in flight collapse on the next check."
+                    }
+                },
+                {
+                    "name": "Refresh access token",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "const token = pm.response.json().data.accessToken;",
+                                    "pm.test('returns a new access token', () => pm.expect(token).to.be.a('string'));",
+                                    "pm.collectionVariables.set('accessToken', token);"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/refresh",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "refresh"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Change password",
+                    "event": [
+                        {
+                            "listen": "prerequest",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "// Normally you pick your own: put it in the `newPassword` environment",
+                                    "// variable and it is sent as-is.",
+                                    "//",
+                                    "// The generated fallback exists only so an unattended Newman run stays",
+                                    "// repeatable \u00e2\u20ac\u201d the API rejects a new password identical to the current",
+                                    "// one, so a hardcoded value would fail on the second run.",
+                                    "const chosen = pm.environment.get('newPassword');",
+                                    "pm.collectionVariables.set('nextPassword', chosen || 'Sentinel' + Date.now());",
+                                    "",
+                                    "if (!chosen) {",
+                                    "  console.log('newPassword is empty \u00e2\u20ac\u201d generated one instead. Set it to choose your own.');",
+                                    "}"
+                                ]
+                            }
+                        },
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "pm.test('clears mustChangePassword', () => {",
+                                    "  pm.expect(pm.response.json().data.user.mustChangePassword).to.eql(false);",
+                                    "});",
+                                    "",
+                                    "// Roll seedPassword forward so the collection stays runnable.",
+                                    "if (pm.response.code === 200) {",
+                                    "  pm.environment.set('seedPassword', pm.collectionVariables.get('nextPassword'));",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"currentPassword\": \"{{seedPassword}}\",\n  \"newPassword\": \"{{nextPassword}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/change-password",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "change-password"
+                            ]
+                        },
+                        "description": "Set `newPassword` in the environment to choose your own. Leave it empty and the pre-request script generates one, purely so unattended runs stay repeatable \u00e2\u20ac\u201d check the console for the value it used.\n\nEither way, `seedPassword` is rolled forward on success so the collection keeps working.\n\n`currentPassword` is always required \u00e2\u20ac\u201d a pending password change never waives it. Minimum 8 characters, and it must differ from the current one. Returns 400 for a Google-only account; use Set password there."
+                    }
+                },
+                {
+                    "name": "Set password (Google-only account)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "// 400 is the correct answer when the account already has a password.",
+                                    "if (pm.response.code === 400) {",
+                                    "  pm.test('refuses accounts that already have a password', () => {",
+                                    "    pm.expect(pm.response.json().message).to.include('already has a password');",
+                                    "  });",
+                                    "} else {",
+                                    "  pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"newPassword\": \"passwordSendiri123\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/set-password",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "set-password"
+                            ]
+                        },
+                        "description": "First password for an account whose hash is NULL. Asks for no current password \u00e2\u20ac\u201d the active session is the proof of ownership.\n\nAfterwards the account has two working ways in: password and Google."
+                    }
                 }
-              ]
-            }
-          },
-          "response": []
+            ]
+        },
+        {
+            "name": "Users",
+            "description": "Finance Lead only. These four endpoints are the ONLY place `isAdmin` is checked.",
+            "item": [
+                {
+                    "name": "List members",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "const users = pm.response.json().data.users;",
+                                    "pm.test('every row carries a derived status', () => {",
+                                    "  users.forEach(u => pm.expect(['Pending', 'Active', 'Inactive']).to.include(u.status));",
+                                    "});",
+                                    "pm.test('no password hashes', () => {",
+                                    "  users.forEach(u => pm.expect(u).to.not.have.property('passwordHash'));",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/users",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "users"
+                            ]
+                        },
+                        "description": "`status` is derived, not stored: never signed in \u00e2\u2020\u2019 Pending, deactivated \u00e2\u2020\u2019 Inactive, otherwise Active."
+                    }
+                },
+                {
+                    "name": "Create member",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                                    "",
+                                    "const body = pm.response.json();",
+                                    "pm.test('returns the temporary password once', () => {",
+                                    "  pm.expect(body.data.tempPassword).to.be.a('string');",
+                                    "});",
+                                    "pm.test('starts as Pending', () => {",
+                                    "  pm.expect(body.data.user.status).to.eql('Pending');",
+                                    "});",
+                                    "pm.test('is not an admin', () => {",
+                                    "  pm.expect(body.data.user.isAdmin).to.eql(false);",
+                                    "});",
+                                    "",
+                                    "pm.collectionVariables.set('memberId', body.data.user.id);",
+                                    "pm.collectionVariables.set('memberEmail', body.data.user.email);",
+                                    "pm.collectionVariables.set('tempPassword', body.data.tempPassword);",
+                                    "",
+                                    "console.log('Temp password captured. No endpoint can read it back \u00e2\u20ac\u201d use Reset password if it is lost.');"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"staff@company.com\",\n  \"fullname\": \"Budi Staff\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/users",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "users"
+                            ]
+                        },
+                        "description": "Only email and full name \u00e2\u20ac\u201d there is no role or department to pick.\n\nThe temporary password appears exactly once in this response. Duplicate email returns 409."
+                    }
+                },
+                {
+                    "name": "Reset member password",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "const body = pm.response.json();",
+                                    "pm.test('issues a fresh temporary password', () => {",
+                                    "  pm.expect(body.data.tempPassword).to.be.a('string');",
+                                    "});",
+                                    "pm.collectionVariables.set('tempPassword', body.data.tempPassword);"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/users/{{memberId}}/reset-password",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "users",
+                                "{{memberId}}",
+                                "reset-password"
+                            ]
+                        },
+                        "description": "The only way out for someone who forgot their password, since the system sends no email.\n\nAlso works on a Google-only account, giving it a password route again."
+                    }
+                },
+                {
+                    "name": "Deactivate member",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "pm.test('now Inactive', () => {",
+                                    "  pm.expect(pm.response.json().data.user.status).to.eql('Inactive');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"isActive\": false\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/users/{{memberId}}/status",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "users",
+                                "{{memberId}}",
+                                "status"
+                            ]
+                        },
+                        "description": "Never a hard delete \u00e2\u20ac\u201d the account is referenced by `transactions.input_by_user_id`, and the audit trail has to survive."
+                    }
+                },
+                {
+                    "name": "Reactivate member",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "pm.test('active again', () => {",
+                                    "  pm.expect(pm.response.json().data.user.isActive).to.eql(true);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"isActive\": true\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/users/{{memberId}}/status",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "users",
+                                "{{memberId}}",
+                                "status"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Member signs in (arms the non-admin guard)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "",
+                                    "const body = pm.response.json();",
+                                    "pm.test('member is not an admin', () => {",
+                                    "  pm.expect(body.data.user.isAdmin).to.eql(false);",
+                                    "});",
+                                    "pm.test('must change the temporary password', () => {",
+                                    "  pm.expect(body.data.mustChangePassword).to.eql(true);",
+                                    "});",
+                                    "",
+                                    "// Kept apart from accessToken so the admin session survives.",
+                                    "pm.environment.set('memberAccessToken', body.data.tokens.accessToken);"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"{{memberEmail}}\",\n  \"password\": \"{{tempPassword}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "description": "Signs in as the member created above using their temporary password, so Guards \u00e2\u2020\u2019 non-admin is forbidden has a real non-admin token to work with.\n\nMust run after Reactivate member \u00e2\u20ac\u201d a deactivated account cannot sign in."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Vendors",
+            "description": "Companies on the other side of a transaction \u00e2\u20ac\u201d a supplier being paid, or (for `B2B Sales`) the buyer. No Delete endpoint: a vendor is retired by setting `status: \"inactive\"`, same pattern as Users.",
+            "item": [
+                {
+                    "name": "Create Vendor",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                                    "",
+                                    "const body = pm.response.json();",
+                                    "pm.test('defaults status to active', () => {",
+                                    "  pm.expect(body.data.vendor.status).to.eql('active');",
+                                    "});",
+                                    "",
+                                    "pm.collectionVariables.set('vendorId', body.data.vendor.id);"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"vendor_name\": \"PT Sejahtera Bersama\",\n  \"bank_account\": \"BCA 12345678\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/vendors",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "vendors"
+                            ]
+                        },
+                        "description": "`status` defaults to `active` when omitted. Captures `vendorId`, spent by Transactions \u00e2\u2020\u2019 Create Transaction (B2B Sales)."
+                    }
+                },
+                {
+                    "name": "List Vendors",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "pm.test('returns an array', () => {",
+                                    "  pm.expect(pm.response.json().data.vendors).to.be.an('array');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/vendors",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "vendors"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Vendor by ID",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "pm.test('id matches the requested vendor', () => {",
+                                    "  pm.expect(pm.response.json().data.vendor.id).to.eql(Number(pm.collectionVariables.get('vendorId')));",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/vendors/{{vendorId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "vendors",
+                                "{{vendorId}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Update Vendor",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "const body = pm.response.json();",
+                                    "pm.test('name is updated', () => {",
+                                    "  pm.expect(body.data.vendor.vendor_name).to.eql('PT Sejahtera Terus');",
+                                    "});",
+                                    "pm.test('status is updated', () => {",
+                                    "  pm.expect(body.data.vendor.status).to.eql('inactive');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"vendor_name\": \"PT Sejahtera Terus\",\n  \"status\": \"inactive\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/vendors/{{vendorId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "vendors",
+                                "{{vendorId}}"
+                            ]
+                        },
+                        "description": "Partial update \u00e2\u20ac\u201d only sent fields change. Setting `status: \"inactive\"` is how a vendor is retired; there is no delete endpoint."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Transactions",
+            "description": "Create, Read, Update for transactions \u00e2\u20ac\u201d no Delete, financial records aren't destroyed. Run the Create requests before Get/Update; they capture `transactionId`. `Create Transaction (B2B Sales)` spends `vendorId`, so run Vendors \u00e2\u2020\u2019 Create Vendor first.",
+            "item": [
+                {
+                    "name": "Create Transaction (B2B Sales)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                                    "",
+                                    "const body = pm.response.json();",
+                                    "pm.test('recorded under the logged-in user, not a client-supplied id', () => {",
+                                    "  pm.expect(body.data.transaction.input_by_user_id).to.eql(Number(pm.collectionVariables.get('currentUserId')));",
+                                    "});",
+                                    "pm.test('vendor is attached', () => {",
+                                    "  pm.expect(body.data.transaction.vendor_id).to.eql(Number(pm.collectionVariables.get('vendorId')));",
+                                    "});",
+                                    "",
+                                    "pm.collectionVariables.set('transactionId', body.data.transaction.id);"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 5000000.00,\n  \"type\": \"income\",\n  \"category\": \"B2B Sales\",\n  \"description\": \"Penjualan B2B ke vendor\",\n  \"vendor_id\": {{vendorId}}\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions"
+                            ]
+                        },
+                        "description": "`B2B Sales` names a specific buying company, so `vendor_id` is required \u00e2\u20ac\u201d reuses the vendor created in Vendors \u00e2\u2020\u2019 Create Vendor.\n\n`input_by_user_id` is never read from the body; it is always the authenticated caller. Captures `transactionId`."
+                    }
+                },
+                {
+                    "name": "Create Transaction (Retail Sales \u00e2\u20ac\u201d no vendor)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                                    "pm.test('vendor is null \u00e2\u20ac\u201d Sales has no single buyer to name', () => {",
+                                    "  pm.expect(pm.response.json().data.transaction.vendor_id).to.be.null;",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"transaction_date\": \"2024-03-06T10:00:00Z\",\n  \"amount\": 150000.00,\n  \"type\": \"income\",\n  \"category\": \"Sales\",\n  \"description\": \"Penjualan ritel tunai\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions"
+                            ]
+                        },
+                        "description": "`Sales` (aggregate retail revenue) is exempt from the vendor requirement \u00e2\u20ac\u201d see `NO_VENDOR_CATEGORIES` in `src/constants/categories.js`. Compare to `B2B Sales`, which names a specific buyer and does require one."
+                    }
+                },
+                {
+                    "name": "Create Transaction (Payroll \u00e2\u20ac\u201d no vendor)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                                    "pm.test('vendor is null \u00e2\u20ac\u201d employees are not vendor records', () => {",
+                                    "  pm.expect(pm.response.json().data.transaction.vendor_id).to.be.null;",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"transaction_date\": \"2024-03-25T10:00:00Z\",\n  \"amount\": 8000000.00,\n  \"type\": \"expense\",\n  \"category\": \"Payroll & Benefits\",\n  \"description\": \"Pembayaran gaji bulan Maret\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions"
+                            ]
+                        },
+                        "description": "The one expense category exempt from the vendor requirement \u00e2\u20ac\u201d paid to employees, not a supplier."
+                    }
+                },
+                {
+                    "name": "List Transactions",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "const body = pm.response.json();",
+                                    "pm.test('paginated shape', () => {",
+                                    "  pm.expect(body.data.transactions).to.be.an('array');",
+                                    "  ['page', 'limit', 'total', 'totalPages'].forEach(k => {",
+                                    "    pm.expect(body.data.pagination).to.have.property(k);",
+                                    "  });",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions?page=1&limit=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                }
+                            ]
+                        },
+                        "description": "Also accepts `type`, `category`, and `search` (matches against description) as filters. `limit` is capped at 100 server-side."
+                    }
+                },
+                {
+                    "name": "List Categories",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "const data = pm.response.json().data;",
+                                    "pm.test('has both catalogs', () => {",
+                                    "  pm.expect(data.income).to.include('B2B Sales');",
+                                    "  pm.expect(data.expense).to.include('Payroll & Benefits');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions/categories",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions",
+                                "categories"
+                            ]
+                        },
+                        "description": "Returns the category catalog transactions are validated against. Pass `?type=income` or `?type=expense` to filter to one side."
+                    }
+                },
+                {
+                    "name": "Get Transaction by ID",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "const t = pm.response.json().data.transaction;",
+                                    "pm.test('id matches the requested transaction', () => {",
+                                    "  pm.expect(t.id).to.eql(Number(pm.collectionVariables.get('transactionId')));",
+                                    "});",
+                                    "pm.test('enriched with vendor and recorder names', () => {",
+                                    "  pm.expect(t).to.have.property('vendor_name');",
+                                    "  pm.expect(t).to.have.property('user_fullname');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions/{{transactionId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions",
+                                "{{transactionId}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Update Transaction",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                                    "pm.test('description is updated', () => {",
+                                    "  pm.expect(pm.response.json().data.transaction.description).to.eql('Updated description');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"amount\": 2000.00,\n  \"description\": \"Updated description\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions/{{transactionId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions",
+                                "{{transactionId}}"
+                            ]
+                        },
+                        "description": "Partial update. Trying to null out `vendor_id` on a transaction whose (existing or updated) category still requires one is rejected \u00e2\u20ac\u201d see Guards."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Findings",
+            "item": [
+                {
+                    "name": "List Findings",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/findings?status=open&limit=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "findings"
+                            ],
+                            "query": [
+                                {
+                                    "key": "status",
+                                    "value": "open"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Finding Summary",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/findings/summary",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "findings",
+                                "summary"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Finding Detail",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/findings/1",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "findings",
+                                "1"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Resolve Finding",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/findings/1/resolve",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "findings",
+                                "1",
+                                "resolve"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"resolution\": \"justified\",\n    \"note\": \"Sudah dikonfirmasi dengan vendor\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Ask Sentinel",
+            "item": [
+                {
+                    "name": "Ask Question",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/ask",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "ask"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"question\": \"Berapa total pengeluaran bulan ini?\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Guards",
+            "description": "Cases the API must refuse. A green run here means the refusals still work \u00e2\u20ac\u201d treat a failure as a security regression, not a broken test.",
+            "item": [
+                {
+                    "name": "Login \u00e2\u20ac\u201d unknown email",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('401', () => pm.response.to.have.status(401));",
+                                    "pm.test('generic message', () => {",
+                                    "  pm.expect(pm.response.json().message).to.eql('Invalid credentials');",
+                                    "});",
+                                    "pm.collectionVariables.set('probeUnknownEmail', pm.response.json().message);"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"nobody@company.com\",\n  \"password\": \"whateverpass\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Login \u00e2\u20ac\u201d wrong password (must match the previous message)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('401', () => pm.response.to.have.status(401));",
+                                    "",
+                                    "// The whole point: an outsider must not be able to tell an unknown",
+                                    "// email apart from a wrong password, or they could map the team.",
+                                    "const previous = pm.collectionVariables.get('probeUnknownEmail');",
+                                    "pm.test('identical to the unknown-email response', () => {",
+                                    "  pm.expect(pm.response.json().message).to.eql(previous);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"{{seedEmail}}\",\n  \"password\": \"definitelyWrong\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "description": "Run this straight after the unknown-email request \u00e2\u20ac\u201d it compares against the message that one captured."
+                    }
+                },
+                {
+                    "name": "Users \u00e2\u20ac\u201d non-admin is forbidden",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('403', () => pm.response.to.have.status(403));",
+                                    "pm.test('leaks no user data', () => {",
+                                    "  pm.expect(pm.response.json()).to.not.have.property('data');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{memberAccessToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/users",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "users"
+                            ]
+                        },
+                        "description": "Needs `memberAccessToken`: log in as the created member first, then copy their access token into that variable.\n\nHiding the menu in the UI is not the protection \u00e2\u20ac\u201d this is."
+                    }
+                },
+                {
+                    "name": "Users \u00e2\u20ac\u201d cannot deactivate yourself",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('400', () => pm.response.to.have.status(400));",
+                                    "pm.test('explains why', () => {",
+                                    "  pm.expect(pm.response.json().message).to.include('your own account');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"isActive\": false\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/users/{{currentUserId}}/status",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "users",
+                                "{{currentUserId}}",
+                                "status"
+                            ]
+                        },
+                        "description": "Guards against the last Lead locking themselves out. Only the seed script can grant admin back."
+                    }
+                },
+                {
+                    "name": "Auth \u00e2\u20ac\u201d garbage bearer token",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('401', () => pm.response.to.have.status(401));"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "not.a.real.token",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/me",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "me"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Errors \u00e2\u20ac\u201d empty body returns field errors, not internals",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('400', () => pm.response.to.have.status(400));",
+                                    "const body = pm.response.json();",
+                                    "pm.test('field errors are clean { field, message }', () => {",
+                                    "  body.errors.forEach(e => {",
+                                    "    pm.expect(e).to.have.property('field');",
+                                    "    pm.expect(e).to.have.property('message');",
+                                    "    pm.expect(e).to.not.have.property('code');",
+                                    "  });",
+                                    "});",
+                                    "pm.test('no stack trace anywhere', () => {",
+                                    "  const raw = pm.response.text();",
+                                    "  ['node_modules', 'at Object', 'stack', 'ECONNREFUSED'].forEach(marker => {",
+                                    "    pm.expect(raw, `response leaked \"${marker}\"`).to.not.include(marker);",
+                                    "  });",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Errors \u00e2\u20ac\u201d malformed JSON is masked",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('400', () => pm.response.to.have.status(400));",
+                                    "pm.test('does not echo the payload back', () => {",
+                                    "  pm.expect(pm.response.text()).to.not.include('bad json');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{bad json"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "description": "body-parser quotes the raw payload in its own message, so that error is masked like any other."
+                    }
+                },
+                {
+                    "name": "Errors \u00e2\u20ac\u201d unknown route",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('404', () => pm.response.to.have.status(404));",
+                                    "pm.test('generic message', () => {",
+                                    "  pm.expect(pm.response.json().message).to.eql('Resource not found');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/does-not-exist",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "does-not-exist"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Transactions \u00e2\u20ac\u201d input_by_user_id cannot be spoofed",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                                    "pm.test('recorded under the real caller, not the spoofed id in the body', () => {",
+                                    "  const t = pm.response.json().data.transaction;",
+                                    "  pm.expect(t.input_by_user_id).to.eql(Number(pm.collectionVariables.get('currentUserId')));",
+                                    "  pm.expect(t.input_by_user_id).to.not.eql(999999);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"income\",\n  \"category\": \"Sales\",\n  \"description\": \"Trying to attribute this to someone else\",\n  \"input_by_user_id\": 999999\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions"
+                            ]
+                        },
+                        "description": "The audit-trail regression test: `input_by_user_id` in the body must be ignored. Only the authenticated session decides who recorded a transaction."
+                    }
+                },
+                {
+                    "name": "Transactions \u00e2\u20ac\u201d B2B Sales without vendor is rejected",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('400', () => pm.response.to.have.status(400));",
+                                    "pm.test('flags vendor_id specifically', () => {",
+                                    "  const errors = pm.response.json().errors;",
+                                    "  pm.expect(errors.some(e => e.field === 'vendor_id')).to.be.true;",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"income\",\n  \"category\": \"B2B Sales\",\n  \"description\": \"Missing vendor on purpose\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions"
+                            ]
+                        },
+                        "description": "B2B Sales names a specific buying company \u00e2\u20ac\u201d omitting `vendor_id` must fail, not silently record an unattributed sale."
+                    }
+                },
+                {
+                    "name": "Transactions \u00e2\u20ac\u201d unknown category is rejected",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('400', () => pm.response.to.have.status(400));",
+                                    "pm.test('flags category specifically', () => {",
+                                    "  const errors = pm.response.json().errors;",
+                                    "  pm.expect(errors.some(e => e.field === 'category')).to.be.true;",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"expense\",\n  \"category\": \"Crypto Mining\",\n  \"description\": \"Not in the catalog\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions"
+                            ]
+                        },
+                        "description": "`category` must be one of `ALL_CATEGORIES` \u00e2\u20ac\u201d free text is rejected, not silently inserted."
+                    }
+                },
+                {
+                    "name": "Transactions \u00e2\u20ac\u201d vendor must actually exist",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('404', () => pm.response.to.have.status(404));",
+                                    "pm.test('reports vendor not found', () => {",
+                                    "  pm.expect(pm.response.json().message).to.eql('Vendor not found');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 1000000,\n  \"type\": \"expense\",\n  \"category\": \"Office Supplies\",\n  \"description\": \"Vendor id does not exist\",\n  \"vendor_id\": 999999\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Transactions \u00e2\u20ac\u201d update cannot null out a required vendor",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('400', () => pm.response.to.have.status(400));",
+                                    "pm.test('explains why', () => {",
+                                    "  pm.expect(pm.response.json().message).to.eql('Vendor is required for this category');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"vendor_id\": null\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions/{{transactionId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions",
+                                "{{transactionId}}"
+                            ]
+                        },
+                        "description": "Run after Transactions \u00e2\u2020\u2019 Create Transaction (B2B Sales), so `{{transactionId}}` still points at a vendor-requiring category. Checked against the *effective* row (existing category + this patch), not the patch alone."
+                    }
+                },
+                {
+                    "name": "Transactions \u00e2\u20ac\u201d bad pagination params are rejected",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('400', () => pm.response.to.have.status(400));",
+                                    "pm.test('flags limit specifically', () => {",
+                                    "  const errors = pm.response.json().errors;",
+                                    "  pm.expect(errors.some(e => e.field === 'limit')).to.be.true;",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions?limit=abc",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "abc"
+                                }
+                            ]
+                        },
+                        "description": "Non-numeric `limit` is rejected outright rather than silently falling back to a default."
+                    }
+                },
+                {
+                    "name": "Transactions \u00e2\u20ac\u201d unknown id returns 404",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('404', () => pm.response.to.have.status(404));"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/transactions/999999",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "transactions",
+                                "999999"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Vendors \u00e2\u20ac\u201d unknown id returns 404",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('404', () => pm.response.to.have.status(404));"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/vendors/999999",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "vendors",
+                                "999999"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Dashboard",
+            "item": [
+                {
+                    "name": "Get Dashboard Summary",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{accessToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/dashboard?startDate=2024-01-01&endDate=2024-12-31",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "dashboard"
+                            ],
+                            "query": [
+                                {
+                                    "key": "startDate",
+                                    "value": "2024-01-01",
+                                    "description": "Optional start date"
+                                },
+                                {
+                                    "key": "endDate",
+                                    "value": "2024-12-31",
+                                    "description": "Optional end date"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }

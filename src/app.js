@@ -6,6 +6,8 @@ import userRoutes from './routes/user.route.js';
 import transactionRoutes from './routes/transaction.routes.js';
 import vendorRoutes from './routes/vendor.route.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
+import findingRoutes from './routes/finding.routes.js';
+import askRoutes from './routes/ask.routes.js';
 import { notFoundHandler, errorHandler } from './middlewares/error.middleware.js';
 import { config } from './config/env.config.js';
 
@@ -26,6 +28,8 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/transactions', transactionRoutes);
 app.use('/api/v1/vendors', vendorRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
+app.use('/api/v1/findings', findingRoutes);
+app.use('/api/v1/ask', askRoutes);
 
 // Must stay last: anything unmatched, or thrown above, lands here.
 app.use(notFoundHandler);

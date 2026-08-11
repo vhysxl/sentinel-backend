@@ -31,7 +31,7 @@ export class DashboardQuery {
 
   static async getTrends({ startDate, endDate }) {
     const whereClause = and(...dateRangeConditions(startDate, endDate));
-    const period = sql`TO_CHAR(${transactions.created_at}, 'YYYY-MM')`;
+    const period = sql`TO_CHAR(${transactions.created_at} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM')`;
 
     return db
       .select({

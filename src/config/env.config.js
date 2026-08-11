@@ -15,6 +15,19 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  // The FastAPI analysis service. It has no auth of its own, so it must never
+  // be reachable from the browser — every call to it goes through this API.
+  // Trailing slashes are stripped so paths can always be joined with a leading one.
+  AGENT_SERVER_URL: z
+    .string()
+    .url('AGENT_SERVER_URL must be a valid URL')
+    .default('http://127.0.0.1:8000')
+    .transform((val) => val.replace(/\/+$/, '')),
+  // Shared secret for the agent server handshake, sent as X-Internal-Key.
+  // Optional here on purpose: a missing key must not stop auth, transactions and
+  // vendors from booting. Only the findings endpoints depend on it, and they
+  // report the reason themselves — see clients/agent.client.js.
+  AGENT_SERVER_KEY: z.string().optional(),
 });
 
 // Validate process.env against schema
@@ -39,6 +52,8 @@ export const config = Object.freeze({
   isProduction: env.NODE_ENV === 'production',
   googleClientId: env.GOOGLE_CLIENT_ID,
   googleClientSecret: env.GOOGLE_CLIENT_SECRET,
+  agentServerUrl: env.AGENT_SERVER_URL,
+  agentServerKey: env.AGENT_SERVER_KEY,
   jwt: Object.freeze({
     secret: env.JWT_SECRET,
     refreshSecret: env.JWT_REFRESH_SECRET,
