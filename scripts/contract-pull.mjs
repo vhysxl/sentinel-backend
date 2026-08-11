@@ -69,7 +69,12 @@ export const FINDING_STATUS_FILTERS = ${arr(status)};
 }
 
 const raw = await loadSnapshot();
-const fingerprint = createHash('sha256').update(raw).digest('hex').slice(0, 16);
+// Fingerprint the LF-normalized text, not the raw bytes: a Windows checkout
+// smudges CRLF into the snapshot while Linux CI reads LF, so hashing the raw
+// file makes the same snapshot hash differently per platform and trips
+// contract:check spuriously.
+const normalized = raw.replace(/\r\n/g, '\n');
+const fingerprint = createHash('sha256').update(normalized).digest('hex').slice(0, 16);
 
 if (CHECK) {
   let stored;
