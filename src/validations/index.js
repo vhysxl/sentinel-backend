@@ -10,6 +10,7 @@ export { createUserSchema, userIdSchema, updateUserStatusSchema } from './user.v
 
 export {
   createTransactionSchema,
+  importTransactionsSchema,
   transactionIdSchema,
   listTransactionsSchema,
   transactionCategoriesQuerySchema,

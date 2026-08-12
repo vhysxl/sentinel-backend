@@ -144,7 +144,7 @@ export class AgentClient {
 
   /**
    * `resolvedBy` is supplied by the caller of this method, never by the HTTP
-   * client — see FindingService.resolve.
+   * client — see FindingController.resolve.
    */
   static resolveFinding(id, { resolution, note, resolvedBy }) {
     return agentRequest(`/api/findings/${id}/resolve`, {
@@ -250,5 +250,19 @@ export class AgentClient {
     
     const qs = query.toString();
     return agentRequest(`/api/ask/history${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Fire-and-forget analysis of a single transaction, used after an import.
+   *
+   * The agent server answers 202 immediately and runs the work on a background
+   * task, so callers must not block on it — and must not treat a rejection as
+   * an import failure (the transaction row already exists).
+   */
+  static analyzeOne(transactionId) {
+    return agentRequest(`/api/transactions/${transactionId}/analyze`, {
+      method: 'POST',
+      timeoutMs: TIMEOUT_MS
+    });
   }
 }

@@ -1,7 +1,9 @@
 import dotenv from 'dotenv';
+import fs from 'node:fs';
 import { z } from 'zod';
 
-dotenv.config();
+// `.env.local` (konvensi Next.js) diutamakan; `.env` sebagai fallback.
+dotenv.config({ path: fs.existsSync('.env.local') ? '.env.local' : '.env' });
 
 // Define Zod schema for environment variables
 const envSchema = z.object({

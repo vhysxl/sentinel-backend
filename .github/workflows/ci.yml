@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout agent contract source
+        # The findings contract is generated from the agent server's OpenAPI
+        # snapshot. The snapshot only lives on that repo's branches, so check it
+        # out locally rather than guessing a default-branch URL that may not
+        # exist yet while the agent PR is still open.
+        uses: actions/checkout@v4
+        with:
+          repository: vhysxl/sentinel-agent-server
+          ref: feat/import-hardening
+          path: agent-contract
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install
+        run: npm ci
+      - name: Contract check
+        run: npm run contract:check
+        env:
+          AGENT_CONTRACT_URL: ${{ github.workspace }}/agent-contract/openapi/snapshot.json
+      - name: Test
+        run: npm test
+        # env.config.js validates required vars at import; the test mocks the
+        # query/client layers so nothing is ever dialed, but the process still
+        # exits without these present.
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          JWT_SECRET: ci-test-secret-that-is-long-enough
+          JWT_REFRESH_SECRET: ci-test-refresh-secret-long-enough
+      - name: Syntax check
+        run: node --check src/server.js && node --check src/app.js
