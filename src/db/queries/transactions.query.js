@@ -73,6 +73,13 @@ export class TransactionsQuery {
     return rows[0];
   }
 
+  /** Bulk insert for imports. Returns every inserted row so callers can fire
+   *  per-transaction analysis without re-reading. */
+  static async createMany(data) {
+    if (data.length === 0) return [];
+    return await db.insert(transactions).values(data).returning();
+  }
+
   static async update(id, data) {
     const rows = await db.update(transactions).set(data).where(eq(transactions.id, id)).returning();
     return rows[0];

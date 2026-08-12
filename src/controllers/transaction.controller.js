@@ -47,4 +47,16 @@ export class TransactionController {
     const transaction = await TransactionService.update(req.params.id, req.body);
     return successResponse(res, 'Transaction updated successfully', { transaction });
   });
+
+  static import = asyncHandler(async (req, res) => {
+    const result = await TransactionService.importTransactions({
+      transactions: req.body.transactions,
+      inputByUserId: req.user.sub
+    });
+    return successResponse(res, 'Transactions imported successfully', {
+      inserted: result.inserted.length,
+      rejected: result.errors,
+      transactions: result.inserted
+    });
+  });
 }

@@ -1,4 +1,4 @@
-import { FindingService } from '../services/finding.service.js';
+import { AgentClient } from '../clients/agent.client.js';
 import { successResponse, errorResponse } from '../utils/api-response.util.js';
 import { asyncHandler } from '../utils/async-handler.util.js';
 import { HTTP_STATUS, ERROR_MESSAGES } from '../constants/index.js';
@@ -21,24 +21,37 @@ const SSE_HEADERS = {
 export class FindingController {
   static list = asyncHandler(async (req, res) => {
     // The agent server answers with a bare array; wrapping it keeps the shape
-    // consistent with every other list endpoint here.
-    const findings = await FindingService.list(req.query);
+    // consistent with every other list endpoint here. The query param is
+    // `risk_level` on the wire; AgentClient expects `riskLevel`.
+    const { status, risk_level: riskLevel, limit } = req.query;
+    const findings = await AgentClient.listFindings({ status, riskLevel, limit });
     return successResponse(res, 'Findings retrieved successfully', { findings });
   });
 
   static summary = asyncHandler(async (req, res) => {
-    const summary = await FindingService.summary();
+    const summary = await AgentClient.getSummary();
     return successResponse(res, 'Findings summary retrieved successfully', { summary });
   });
 
   static getById = asyncHandler(async (req, res) => {
-    const finding = await FindingService.getById(req.params.id);
+    const finding = await AgentClient.getFinding(req.params.id);
     return successResponse(res, 'Finding retrieved successfully', { finding });
   });
 
   static resolve = asyncHandler(async (req, res) => {
     // req.user.sub, never req.body — the client does not get to say who it is.
-    const finding = await FindingService.resolve(req.params.id, req.body, req.user.sub);
+    // The agent server accepts `resolved_by` straight from its request body, so
+    // without this the browser could close a finding under someone else's name —
+    // and for an audit tool, a forgeable "who signed this off" is worse than no
+    // record at all.
+    const finding = await AgentClient.resolveFinding(req.params.id, {
+      resolution: req.body.resolution,
+      note: req.body.note ?? null,
+      resolvedBy: req.user.sub
+    });
+    console.log(
+      `[FINDINGS][resolve] finding ${req.params.id} closed as ${req.body.resolution} by user ${req.user.sub}`
+    );
     return successResponse(res, 'Finding resolved successfully', { finding });
   });
 
@@ -61,17 +74,19 @@ export class FindingController {
    * lives here and must never reach a client.
    */
   static analyze = async (req, res) => {
-    const { startDate, endDate, force } = req.body;
     const upstream = new AbortController();
 
     let body;
     try {
-      body = await FindingService.startAnalysis({
-        startDate,
-        endDate,
-        force,
+      body = await AgentClient.streamAnalysis({
+        startDate: req.body.startDate,
+        endDate: req.body.endDate,
+        force: req.body.force,
         signal: upstream.signal
       });
+      console.log(
+        `[FINDINGS][analyze] run started for ${req.body.startDate}..${req.body.endDate} (force=${req.body.force})`
+      );
     } catch (error) {
       // Nothing written yet, so an ordinary status code is still possible.
       // This is the only window in which that is true — hence doing the whole
