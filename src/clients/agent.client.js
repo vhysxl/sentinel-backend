@@ -240,4 +240,15 @@ export class AgentClient {
       timeoutMs: ASK_TIMEOUT_MS
     });
   }
+
+  static askHistory({ limit, topic, start_date, end_date }) {
+    const query = new URLSearchParams();
+    if (limit) query.set('limit', String(limit));
+    if (topic) query.set('topic', topic);
+    if (start_date) query.set('start_date', start_date);
+    if (end_date) query.set('end_date', end_date);
+    
+    const qs = query.toString();
+    return agentRequest(`/api/ask/history${qs ? `?${qs}` : ''}`);
+  }
 }

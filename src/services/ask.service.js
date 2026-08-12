@@ -21,4 +21,9 @@ export class AskService {
 
     return payload;
   }
+
+  static async getHistory({ limit, topic, start_date, end_date }) {
+    const payload = await AgentClient.askHistory({ limit, topic, start_date, end_date });
+    return payload;
+  }
 }

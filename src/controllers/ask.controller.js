@@ -10,4 +10,10 @@ export class AskController {
     const result = await AskService.ask(req.body.question);
     return successResponse(res, 'Answer generated successfully', result);
   });
+
+  static getHistory = asyncHandler(async (req, res) => {
+    const { limit, topic, start_date, end_date } = req.query;
+    const result = await AskService.getHistory({ limit, topic, start_date, end_date });
+    return successResponse(res, 'Ask history fetched successfully', result);
+  });
 }

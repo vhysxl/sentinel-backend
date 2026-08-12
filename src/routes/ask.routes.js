@@ -9,5 +9,6 @@ const router = Router();
 router.use(authenticate);
 
 router.post('/', validate(askSchema), AskController.ask);
+router.get('/history', AskController.getHistory);
 
 export default router;
