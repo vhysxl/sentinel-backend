@@ -827,7 +827,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 5000000.00,\n  \"type\": \"income\",\n  \"category\": \"B2B Sales\",\n  \"description\": \"Penjualan B2B ke vendor\",\n  \"vendor_id\": {{vendorId}}\n}",
+                            "raw": "{\n  \"transaction_date\": \"2024-03-05T10:00:00Z\",\n  \"amount\": 5000000.00,\n  \"type\": \"income\",\n  \"category\": \"B2B Sales\",\n  \"description\": \"Penjualan B2B ke vendor\",\n  \"invoice_no\": \"INV-12345\",\n  \"vendor_id\": {{vendorId}}\n}",
                             "options": {
                                 "raw": {
                                     "language": "json"
@@ -1077,7 +1077,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"amount\": 2000.00,\n  \"description\": \"Updated description\"\n}"
+                            "raw": "{\n  \"amount\": 2000.00,\n  \"description\": \"Updated description\",\n  \"invoice_no\": \"INV-12345-REV\"\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/transactions/{{transactionId}}",
