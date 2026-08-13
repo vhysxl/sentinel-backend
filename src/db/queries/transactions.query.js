@@ -13,6 +13,7 @@ const listColumns = {
   type: transactions.type,
   category: transactions.category,
   description: transactions.description,
+  invoice_no: transactions.invoice_no,
   vendor_id: transactions.vendor_id,
   vendor_name: vendors.vendor_name,
   input_by_user_id: transactions.input_by_user_id,

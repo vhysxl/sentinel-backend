@@ -89,6 +89,7 @@ export class TransactionService {
       type: data.type,
       category: data.category,
       description: data.description,
+      invoice_no: data.invoice_no || null,
       vendor_id: data.vendor_id || null,
       input_by_user_id: inputByUserId
     });
@@ -122,6 +123,7 @@ export class TransactionService {
     if (data.type) updateData.type = data.type;
     if (data.category) updateData.category = data.category;
     if (data.description !== undefined) updateData.description = data.description;
+    if (data.invoice_no !== undefined) updateData.invoice_no = data.invoice_no;
     if (data.vendor_id !== undefined) updateData.vendor_id = data.vendor_id;
 
     const updated = await TransactionsQuery.update(id, updateData);

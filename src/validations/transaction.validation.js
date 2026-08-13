@@ -17,6 +17,7 @@ export const createTransactionSchema = z.object({
       description: z
         .string({ required_error: 'Description is required' })
         .min(1, 'Description is required'),
+      invoice_no: z.string().trim().max(50, 'Invoice number must be at most 50 characters').optional(),
       vendor_id: z.number().int().positive('Vendor id must be positive').optional().nullable()
     })
     .superRefine((data, ctx) => {
@@ -65,6 +66,7 @@ export const updateTransactionSchema = z.object({
     type: typeField.optional(),
     category: categoryField.optional(),
     description: z.string().min(1, 'Description is required').optional(),
+    invoice_no: z.string().trim().max(50, 'Invoice number must be at most 50 characters').optional(),
     vendor_id: z.number().int().positive('Vendor id must be positive').optional().nullable()
   })
 });
