@@ -1,4 +1,4 @@
-import { eq, and, desc, ilike, sql } from 'drizzle-orm';
+import { eq, and, desc, ilike, sql, ne } from 'drizzle-orm';
 import { db } from '../client.js';
 import { transactions } from '../schema/transactions.js';
 import { vendors } from '../schema/vendors.js';
@@ -39,6 +39,16 @@ export class TransactionsQuery {
       .leftJoin(users, eq(transactions.input_by_user_id, users.id))
       .where(eq(transactions.id, id))
       .limit(1);
+    return rows[0] || null;
+  }
+
+  static async findByInvoiceNo(invoiceNo, excludeId = null) {
+    if (!invoiceNo) return null;
+    const conditions = [eq(transactions.invoice_no, invoiceNo)];
+    if (excludeId) {
+      conditions.push(ne(transactions.id, excludeId));
+    }
+    const rows = await db.select().from(transactions).where(and(...conditions)).limit(1);
     return rows[0] || null;
   }
 

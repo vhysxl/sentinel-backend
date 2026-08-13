@@ -84,6 +84,13 @@ export class TransactionService {
       await assertVendorExists(data.vendor_id);
     }
 
+    if (data.invoice_no) {
+      const existingInvoice = await TransactionsQuery.findByInvoiceNo(data.invoice_no);
+      if (existingInvoice) {
+        throw createError(ERROR_MESSAGES.INVOICE_ALREADY_EXISTS, HTTP_STATUS.CONFLICT);
+      }
+    }
+
     const transaction = await TransactionsQuery.create({
       amount: data.amount.toString(),
       type: data.type,
@@ -116,6 +123,13 @@ export class TransactionService {
 
     if (vendorRequiredForCategory(effectiveCategory) && !effectiveVendorId) {
       throw createError(ERROR_MESSAGES.VENDOR_REQUIRED_FOR_CATEGORY, HTTP_STATUS.BAD_REQUEST);
+    }
+
+    if (data.invoice_no !== undefined && data.invoice_no !== null) {
+      const existingInvoice = await TransactionsQuery.findByInvoiceNo(data.invoice_no, id);
+      if (existingInvoice) {
+        throw createError(ERROR_MESSAGES.INVOICE_ALREADY_EXISTS, HTTP_STATUS.CONFLICT);
+      }
     }
 
     const updateData = {};
@@ -156,6 +170,16 @@ export class TransactionService {
         }
         if (vendorRequiredForCategory(row.category) && !row.vendor_id) {
           throw createError(ERROR_MESSAGES.VENDOR_REQUIRED_FOR_CATEGORY, HTTP_STATUS.BAD_REQUEST);
+        }
+        if (row.invoice_no) {
+          const existingInvoice = await TransactionsQuery.findByInvoiceNo(row.invoice_no);
+          if (existingInvoice) {
+            throw createError(ERROR_MESSAGES.INVOICE_ALREADY_EXISTS, HTTP_STATUS.CONFLICT);
+          }
+          // Also check against the rows we are about to insert to avoid duplicates within the payload
+          if (rows.some((r) => r.invoice_no === row.invoice_no)) {
+            throw createError(ERROR_MESSAGES.INVOICE_ALREADY_EXISTS, HTTP_STATUS.CONFLICT);
+          }
         }
         rows.push({
           amount: row.amount.toString(),

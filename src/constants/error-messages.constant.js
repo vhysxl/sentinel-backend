@@ -41,6 +41,7 @@ export const ERROR_MESSAGES = Object.freeze({
   // Transactions
   TRANSACTION_NOT_FOUND: 'Transaction not found',
   VENDOR_REQUIRED_FOR_CATEGORY: 'Vendor is required for this category',
+  INVOICE_ALREADY_EXISTS: 'Transaction with this invoice number already exists',
 
   // Findings
   FINDING_NOT_FOUND: 'Finding not found',
