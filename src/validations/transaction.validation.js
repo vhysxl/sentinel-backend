@@ -17,7 +17,7 @@ export const createTransactionSchema = z.object({
       description: z
         .string({ required_error: 'Description is required' })
         .min(1, 'Description is required'),
-      invoice_no: z.string().trim().max(50, 'Invoice number must be at most 50 characters').optional(),
+      invoice_no: z.string().trim().max(50, 'Invoice number must be at most 50 characters').optional().nullable(),
       vendor_id: z.number().int().positive('Vendor id must be positive').optional().nullable()
     })
     .superRefine((data, ctx) => {
@@ -66,7 +66,7 @@ export const updateTransactionSchema = z.object({
     type: typeField.optional(),
     category: categoryField.optional(),
     description: z.string().min(1, 'Description is required').optional(),
-    invoice_no: z.string().trim().max(50, 'Invoice number must be at most 50 characters').optional(),
+    invoice_no: z.string().trim().max(50, 'Invoice number must be at most 50 characters').optional().nullable(),
     vendor_id: z.number().int().positive('Vendor id must be positive').optional().nullable()
   })
 });
@@ -87,7 +87,7 @@ const importRow = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be a date in YYYY-MM-DD format')
       .optional(),
-    invoice_no: z.string().trim().max(50, 'Invoice number must be at most 50 characters').optional(),
+    invoice_no: z.string().trim().max(50, 'Invoice number must be at most 50 characters').optional().nullable(),
     vendor_name: z.string().trim().min(1, 'Vendor name is required').max(100).optional(),
     vendor_id: z.number().int().positive('Vendor id must be positive').optional().nullable()
   })
